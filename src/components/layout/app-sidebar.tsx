@@ -85,7 +85,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-white">
+        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-sidebar-foreground">
           {APP_NAME}
         </Link>
       </div>

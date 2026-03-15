@@ -49,8 +49,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 bg-gradient-to-br from-[oklch(0.320_0.065_250)] via-[oklch(0.360_0.060_250)] to-[oklch(0.250_0.055_250)]">
-      <Card className="w-full max-w-sm shadow-xl border-0">
+    <div className="flex min-h-screen items-center justify-center px-4 bg-white dark:bg-black">
+      <Card className="w-full max-w-sm shadow-lg border border-black/10 dark:border-white/10">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">{APP_NAME}</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
@@ -92,7 +92,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <div className="fixed bottom-4 left-0 right-0 text-center text-xs text-white/50 space-y-1">
+      <div className="fixed bottom-4 left-0 right-0 text-center text-xs text-black/40 dark:text-white/40 space-y-1">
         <p>{APP_VERSION}</p>
         <p>{APP_CREATOR}</p>
       </div>

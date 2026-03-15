@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Space_Grotesk, DM_Sans, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { RegisterSW } from "@/components/pwa/register-sw"
 import { APP_NAME } from "@/lib/app-config"
 import "./globals.css"
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
+const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"] })
+const dmSans = DM_Sans({ variable: "--font-dm-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 
 export const metadata: Metadata = {
@@ -31,15 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Update theme-color to match your brand */}
-        <meta name="theme-color" content="#1B3A5C" />
-        <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48x48.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+        {/* Sequential lime accent — update theme-color per project */}
+        <meta name="theme-color" content="#0a0a0a" />
+        {/* Add favicon files to /public/icons/ per project */}
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <body className={`${spaceGrotesk.variable} ${dmSans.variable} ${geistMono.variable} font-[family-name:var(--font-dm-sans)] antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           {children}
           <RegisterSW />
         </ThemeProvider>

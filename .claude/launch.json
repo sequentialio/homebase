@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "homebase",
+      "cwd": "/Users/sequential/Documents/sequential/projects/homebase/template",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "sales_app",
+      "cwd": "/Users/sequential/Documents/sequential/projects/rfm/sales_app/sales_app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3002"],
+      "port": 3002
+    }
+  ]
+}
