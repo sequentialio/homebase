@@ -4,11 +4,12 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Home,
   LayoutDashboard,
-  Users,
+  Wallet,
+  Home,
+  Calendar,
+  Bot,
   Settings,
-  CircleHelp,
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -38,34 +39,40 @@ function getInitials(name: string | null | undefined): string {
 // which paths highlight this item as active.
 const navItems = [
   {
-    label: "Home",
+    label: "Overview",
     href: "/dashboard",
-    icon: Home,
+    icon: LayoutDashboard,
     matchPrefixes: ["/dashboard"],
   },
   {
-    label: "Records",
-    href: "/records",
-    icon: LayoutDashboard,
-    matchPrefixes: ["/records"],
+    label: "Finances",
+    href: "/finances",
+    icon: Wallet,
+    matchPrefixes: ["/finances"],
   },
   {
-    label: "People",
-    href: "/people",
-    icon: Users,
-    matchPrefixes: ["/people", "/admin/users"],
+    label: "Household",
+    href: "/household",
+    icon: Home,
+    matchPrefixes: ["/household"],
+  },
+  {
+    label: "Calendar",
+    href: "/calendar",
+    icon: Calendar,
+    matchPrefixes: ["/calendar"],
+  },
+  {
+    label: "AI Assistant",
+    href: "/assistant",
+    icon: Bot,
+    matchPrefixes: ["/assistant"],
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
-    matchPrefixes: ["/settings", "/admin"],
-  },
-  {
-    label: "Help",
-    href: "/help",
-    icon: CircleHelp,
-    matchPrefixes: ["/help"],
+    matchPrefixes: ["/settings"],
   },
 ]
 
