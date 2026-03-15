@@ -130,7 +130,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
         >
           <Avatar size="sm">
             {profile?.avatar_url ? (
-              <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
+              <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ""} />
             ) : null}
             <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-[10px] font-semibold">
               {getInitials(profile?.full_name)}

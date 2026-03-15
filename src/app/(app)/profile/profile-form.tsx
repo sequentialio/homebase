@@ -30,8 +30,6 @@ function getInitials(name: string | null | undefined): string {
 
 export function ProfileForm({ profile }: { profile: Profile }) {
   const [fullName, setFullName] = useState(profile.full_name)
-  const [phone, setPhone] = useState(profile.phone ?? "")
-  const [title, setTitle] = useState(profile.title ?? "")
   const [saving, setSaving] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url)
   const [uploading, setUploading] = useState(false)
@@ -95,7 +93,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
     const { error } = await supabase
       .from("profiles")
-      .update({ full_name: fullName, phone: phone || null, title: title || null })
+      .update({ full_name: fullName })
       .eq("id", profile.id)
 
     if (error) {
@@ -146,7 +144,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         <CardContent className="pt-6 flex flex-col items-center gap-4">
           <div className="relative">
             <Avatar className="size-24">
-              {avatarUrl ? <AvatarImage src={avatarUrl} alt={profile.full_name} /> : null}
+              {avatarUrl ? <AvatarImage src={avatarUrl} alt={profile.full_name ?? ""} /> : null}
               <AvatarFallback className="bg-primary/10 text-primary text-2xl font-semibold">
                 {getInitials(profile.full_name)}
               </AvatarFallback>
@@ -163,7 +161,6 @@ export function ProfileForm({ profile }: { profile: Profile }) {
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
           <div className="text-center">
             <p className="font-medium">{profile.full_name}</p>
-            <p className="text-sm text-muted-foreground">{profile.email}</p>
           </div>
           {uploading && <p className="text-sm text-muted-foreground">Uploading...</p>}
         </CardContent>
@@ -173,29 +170,17 @@ export function ProfileForm({ profile }: { profile: Profile }) {
       <Card>
         <CardHeader>
           <CardTitle>Your Information</CardTitle>
-          <CardDescription>Update your name, title, and phone number</CardDescription>
+          <CardDescription>Update your display name</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" value={profile.email} disabled />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
               <Input id="role" value={profile.role?.replace("_", " ") ?? ""} disabled className="capitalize" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
-              <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Operations Manager" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 123-4567" />
+              <Input id="fullName" value={fullName ?? ""} onChange={(e) => setFullName(e.target.value)} required />
             </div>
             <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
           </form>

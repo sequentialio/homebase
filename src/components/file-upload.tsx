@@ -82,7 +82,8 @@ export function FileUpload({
 
   const loadFiles = useCallback(async () => {
     const { data } = await supabase
-      .from(tableName)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from(tableName as any)
       .select("*")
       .eq("entity_id", entityId)
       .order("created_at", { ascending: false })
@@ -90,10 +91,12 @@ export function FileUpload({
     if (data && data.length > 0) {
       const withUrls: FileRow[] = await Promise.all(
         data.map(async (f) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = f as any
           const { data: urlData } = await supabase.storage
             .from(bucket)
-            .createSignedUrl(f.storage_path, 3600)
-          return { ...f, signedUrl: urlData?.signedUrl ?? null }
+            .createSignedUrl(row.storage_path, 3600)
+          return { ...row, signedUrl: urlData?.signedUrl ?? null } as FileRow
         })
       )
       setFiles(withUrls)
@@ -131,7 +134,8 @@ export function FileUpload({
         continue
       }
 
-      await supabase.from(tableName).insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from(tableName).insert({
         entity_id: entityId,
         storage_path: path,
         file_name: file.name,
@@ -150,7 +154,8 @@ export function FileUpload({
 
   async function handleDelete(file: FileRow) {
     await supabase.storage.from(bucket).remove([file.storage_path])
-    await supabase.from(tableName).delete().eq("id", file.id)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from(tableName).delete().eq("id", file.id)
     setFiles((prev) => prev.filter((f) => f.id !== file.id))
     toast.success("File removed")
   }

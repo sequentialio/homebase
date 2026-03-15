@@ -61,7 +61,7 @@ interface TableInfo {
 const ROLES = ["admin", "manager", "member"] as const
 
 // Tables to show counts for in the data viewer
-const WATCHED_TABLES = ["profiles", "feedback"] as const
+const WATCHED_TABLES = ["profiles", "transactions", "bank_accounts", "budgets"] as const
 
 // Feature flags — add new ones here
 const DEFAULT_FLAGS: Record<string, boolean> = {

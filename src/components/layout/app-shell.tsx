@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/profile" aria-label="Your profile" className="flex items-center">
               <Avatar size="default" className="cursor-pointer ring-2 ring-transparent hover:ring-sidebar-accent md:hover:ring-primary/20 transition-shadow">
                 {profile?.avatar_url ? (
-                  <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
+                  <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ""} />
                 ) : null}
                 <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground md:bg-primary/10 md:text-primary font-semibold">
                   {getInitials(profile?.full_name)}

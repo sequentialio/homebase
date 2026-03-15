@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { useUser } from "@/hooks/use-user"
 import { APP_NAME, APP_VERSION, APP_CREATOR, RELEASE_NOTES } from "@/lib/app-config"
 import { Button } from "@/components/ui/button"
@@ -54,7 +53,6 @@ const DEV_DOMAIN = "sequentialanalytics.com"
 
 export default function HelpPage() {
   const { user, profile, realRole } = useUser()
-  const supabase = createClient()
   const [category, setCategory] = useState("")
   const [description, setDescription] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -80,28 +78,13 @@ export default function HelpPage() {
   }, [devMode, toggleDevMode, canAccessDevMode])
 
   async function handleSubmit() {
-    if (!category || !description.trim() || !profile) return
+    if (!category || !description.trim()) return
     setSubmitting(true)
-
-    const { error } = await supabase.from("feedback").insert({
-      user_id: profile.id,
-      category,
-      description: description.trim(),
-    })
-
-    if (error) {
-      toast.error("Failed to submit feedback")
-    } else {
-      toast.success("Feedback submitted — thank you!")
-      // Fire-and-forget notification (optional edge function)
-      try {
-        supabase.functions.invoke("notify-feedback", {
-          body: { user_id: profile.id, category, description: description.trim() },
-        }).catch(() => {})
-      } catch { /* ignore if not deployed */ }
-      setCategory("")
-      setDescription("")
-    }
+    // Personal 2-user app — log locally for now
+    console.log("[feedback]", { category, description: description.trim() })
+    toast.success("Noted!")
+    setCategory("")
+    setDescription("")
     setSubmitting(false)
   }
 
