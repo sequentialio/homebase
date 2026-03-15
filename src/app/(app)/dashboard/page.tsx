@@ -27,7 +27,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">
-          Welcome back, {profile.full_name || profile.email}
+          Welcome back, {profile.full_name || "there"}
         </p>
       </div>
 
