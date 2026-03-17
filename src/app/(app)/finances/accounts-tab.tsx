@@ -367,7 +367,7 @@ export function AccountsTab({
         section_id: sectionId,
         position: i,
       }))
-      const { error } = await supabase.from("bank_accounts").upsert(updates)
+      const { error } = await supabase.from("bank_accounts").upsert(updates as never)
       if (error) toast.error("Failed to save order")
     },
     [supabase]

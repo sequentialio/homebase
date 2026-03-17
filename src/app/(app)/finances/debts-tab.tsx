@@ -396,7 +396,7 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
 
   async function persistPositions(containerId: string, debts: Debt[]) {
     const updates = debts.map((d, i) => ({ id: d.id, position: i, section_id: d.section_id }))
-    const { error } = await supabase.from("debts").upsert(updates)
+    const { error } = await supabase.from("debts").upsert(updates as never)
     if (error) toast.error("Failed to save order")
   }
 

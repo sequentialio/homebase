@@ -473,7 +473,7 @@ export function ExpensesTab({
 
   async function persistPositions(containerId: string, expenses: RecurringExpense[]) {
     const updates = expenses.map((e, i) => ({ id: e.id, position: i, section_id: e.section_id }))
-    const { error } = await supabase.from("recurring_expenses").upsert(updates)
+    const { error } = await supabase.from("recurring_expenses").upsert(updates as never)
     if (error) toast.error("Failed to save order")
   }
 

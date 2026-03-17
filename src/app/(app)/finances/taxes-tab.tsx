@@ -118,7 +118,7 @@ async function persistPositions(
   items: { id: string }[]
 ) {
   const updates = items.map((item, i) => ({ id: item.id, position: i + 1 }))
-  await supabase.from(table).upsert(updates)
+  await supabase.from(table as never).upsert(updates as never)
 }
 
 // ── Sortable Row ──────────────────────────────────────────────────────────────
