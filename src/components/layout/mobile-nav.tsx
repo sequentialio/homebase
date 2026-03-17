@@ -3,11 +3,11 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  Wallet,
   Home,
-  LayoutDashboard,
-  Users,
+  Calendar,
+  Bot,
   Settings,
-  HelpCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Tables } from "@/types/database"
@@ -22,34 +22,34 @@ interface MobileNavProps {
 // Keep in sync with app-sidebar.tsx. Max 5 items for mobile bottom nav.
 const navItems = [
   {
-    label: "Home",
-    href: "/dashboard",
+    label: "Finances",
+    href: "/finances",
+    icon: Wallet,
+    matchPrefixes: ["/finances"],
+  },
+  {
+    label: "Household",
+    href: "/household",
     icon: Home,
-    matchPrefixes: ["/dashboard"],
+    matchPrefixes: ["/household"],
   },
   {
-    label: "Records",
-    href: "/records",
-    icon: LayoutDashboard,
-    matchPrefixes: ["/records"],
+    label: "Calendar",
+    href: "/calendar",
+    icon: Calendar,
+    matchPrefixes: ["/calendar"],
   },
   {
-    label: "People",
-    href: "/people",
-    icon: Users,
-    matchPrefixes: ["/people"],
+    label: "Assistant",
+    href: "/assistant",
+    icon: Bot,
+    matchPrefixes: ["/assistant"],
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
-    matchPrefixes: ["/settings", "/admin"],
-  },
-  {
-    label: "Help",
-    href: "/help",
-    icon: HelpCircle,
-    matchPrefixes: ["/help"],
+    matchPrefixes: ["/settings"],
   },
 ]
 

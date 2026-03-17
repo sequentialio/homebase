@@ -10,13 +10,35 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
   public: {
     Tables: {
+      account_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       asana_connections: {
         Row: {
           access_token_enc: string
@@ -61,6 +83,8 @@ export type Database = {
           id: string
           last_updated: string
           name: string
+          position: number
+          section_id: string | null
           user_id: string
         }
         Insert: {
@@ -70,6 +94,8 @@ export type Database = {
           id?: string
           last_updated?: string
           name: string
+          position?: number
+          section_id?: string | null
           user_id: string
         }
         Update: {
@@ -79,6 +105,40 @@ export type Database = {
           id?: string
           last_updated?: string
           name?: string
+          position?: number
+          section_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_accounts_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "account_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
           user_id?: string
         }
         Relationships: []
@@ -90,6 +150,8 @@ export type Database = {
           id: string
           month: number
           monthly_limit: number
+          position: number
+          section_id: string | null
           year: number
         }
         Insert: {
@@ -98,6 +160,8 @@ export type Database = {
           id?: string
           month: number
           monthly_limit: number
+          position?: number
+          section_id?: string | null
           year: number
         }
         Update: {
@@ -106,9 +170,19 @@ export type Database = {
           id?: string
           month?: number
           monthly_limit?: number
+          position?: number
+          section_id?: string | null
           year?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "budgets_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "budget_sections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       calendar_events: {
         Row: {
@@ -149,6 +223,33 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          messages: Json
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       cleaning_duties: {
         Row: {
           assigned_to: string | null
@@ -182,6 +283,30 @@ export type Database = {
         }
         Relationships: []
       }
+      debt_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           balance: number
@@ -192,6 +317,8 @@ export type Database = {
           name: string
           notes: string | null
           payoff_date: string | null
+          position: number
+          section_id: string | null
         }
         Insert: {
           balance?: number
@@ -202,6 +329,8 @@ export type Database = {
           name: string
           notes?: string | null
           payoff_date?: string | null
+          position?: number
+          section_id?: string | null
         }
         Update: {
           balance?: number
@@ -212,6 +341,67 @@ export type Database = {
           name?: string
           notes?: string | null
           payoff_date?: string | null
+          position?: number
+          section_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debts_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "debt_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      google_calendar_connections: {
+        Row: {
+          access_token_enc: string
+          email: string | null
+          expires_at: string
+          refresh_token_enc: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token_enc: string
+          email?: string | null
+          expires_at: string
+          refresh_token_enc: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token_enc?: string
+          email?: string | null
+          expires_at?: string
+          refresh_token_enc?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -415,6 +605,149 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_expenses: {
+        Row: {
+          account_id: string | null
+          active: boolean
+          amount: number
+          auto_pay: boolean
+          billing_day: number | null
+          category: string | null
+          created_at: string | null
+          frequency: string
+          id: string
+          name: string
+          notes: string | null
+          position: number
+          section_id: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          active?: boolean
+          amount?: number
+          auto_pay?: boolean
+          billing_day?: number | null
+          category?: string | null
+          created_at?: string | null
+          frequency?: string
+          id?: string
+          name: string
+          notes?: string | null
+          position?: number
+          section_id?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          active?: boolean
+          amount?: number
+          auto_pay?: boolean
+          billing_day?: number | null
+          category?: string | null
+          created_at?: string | null
+          frequency?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          position?: number
+          section_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_expenses_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_expenses_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "expense_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_items: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          due_date: string | null
+          filed: boolean
+          id: string
+          name: string
+          notes: string | null
+          position: number
+          section_id: string | null
+          tax_year: number
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          due_date?: string | null
+          filed?: boolean
+          id?: string
+          name: string
+          notes?: string | null
+          position?: number
+          section_id?: string | null
+          tax_year?: number
+          type?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          due_date?: string | null
+          filed?: boolean
+          id?: string
+          name?: string
+          notes?: string | null
+          position?: number
+          section_id?: string | null
+          tax_year?: number
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_items_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "tax_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           account_id: string | null
@@ -502,13 +835,13 @@ export type Tables<
     : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
         DefaultSchema["Views"])
-  ? (DefaultSchema["Tables"] &
-      DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-      Row: infer R
-    }
-    ? R
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
     : never
-  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
@@ -528,12 +861,12 @@ export type TablesInsert<
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-      Insert: infer I
-    }
-    ? I
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
     : never
-  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
@@ -553,12 +886,12 @@ export type TablesUpdate<
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-      Update: infer U
-    }
-    ? U
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
     : never
-  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
@@ -574,8 +907,8 @@ export type Enums<
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-  : never
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
@@ -591,8 +924,8 @@ export type CompositeTypes<
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-  : never
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
 export const Constants = {
   public: {

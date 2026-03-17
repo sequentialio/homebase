@@ -41,6 +41,14 @@ export const INCOME_FREQUENCIES = [
   "one-time",
 ] as const
 
+export const EXPENSE_FREQUENCIES = [
+  "weekly",
+  "biweekly",
+  "monthly",
+  "quarterly",
+  "annually",
+] as const
+
 export const INSURANCE_TYPES = [
   "Health",
   "Dental",

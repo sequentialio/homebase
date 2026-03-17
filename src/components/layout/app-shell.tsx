@@ -2,11 +2,10 @@
 
 import Link from "next/link"
 import { useTheme } from "next-themes"
-import { Sun, Moon, CircleHelp } from "lucide-react"
+import { Sun, Moon } from "lucide-react"
 import { useUser } from "@/hooks/use-user"
 import { AppSidebar } from "./app-sidebar"
 import { MobileNav } from "./mobile-nav"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { APP_NAME } from "@/lib/app-config"
 
@@ -17,30 +16,25 @@ function getInitials(name: string | null | undefined): string {
   return parts[0][0]?.toUpperCase() ?? "?"
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { profile, loading, roleOverride } = useUser()
+import type { Tables } from "@/types/database"
+
+interface AppShellProps {
+  children: React.ReactNode
+  initialProfile: Tables<"profiles"> | null
+}
+
+export function AppShell({ children, initialProfile }: AppShellProps) {
+  const { profile, roleOverride } = useUser(initialProfile)
   const { theme, setTheme } = useTheme()
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="space-y-4 w-full max-w-md px-4">
-          <Skeleton className="h-8 w-48 mx-auto" />
-          <Skeleton className="h-4 w-32 mx-auto" />
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <AppSidebar profile={profile} />
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Role override banner — dev only */}
         {roleOverride && (
           <div className="bg-destructive text-destructive-foreground text-center text-xs font-medium py-1 px-2">
             Dev Mode: viewing as <span className="font-bold">{roleOverride.replace("_", " ")}</span>
-            <span className="ml-1.5 opacity-75">— go to Help → Dev Tools to reset</span>
           </div>
         )}
         <header
@@ -61,14 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Sun className="size-[18px] rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute size-[18px] rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
             </button>
-            <Link
-              href="/help"
-              aria-label="Help"
-              className="size-8 rounded-full flex items-center justify-center transition-colors text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent md:hidden"
-            >
-              <CircleHelp className="size-[18px]" />
-            </Link>
-            <Link href="/profile" aria-label="Your profile" className="flex items-center">
+<Link href="/profile" aria-label="Your profile" className="flex items-center">
               <Avatar size="default" className="cursor-pointer ring-2 ring-transparent hover:ring-sidebar-accent md:hover:ring-primary/20 transition-shadow">
                 {profile?.avatar_url ? (
                   <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ""} />
@@ -81,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         {/* paddingBottom accounts for fixed mobile nav + iPhone home indicator */}
-        <main className="flex-1 md:pb-0" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))' }}>
+        <main className="flex-1 overflow-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </main>
       </div>

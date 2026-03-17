@@ -60,12 +60,12 @@
   --brand-lime: oklch(0.937 0.206 122.6);
   --brand-lime-fg: oklch(0.12 0.030 122.6);  /* dark text on lime */
 
-  /* Charcoal sidebar — always dark, same in both modes */
-  --sidebar: oklch(0.21 0.008 250);
+  /* Nav sidebar — #1E2023 cool charcoal, same in both modes */
+  --sidebar: oklch(0.195 0.005 250);
   --sidebar-foreground: oklch(0.940 0.005 250);
   --sidebar-primary: var(--brand-lime);
   --sidebar-primary-foreground: var(--brand-lime-fg);
-  --sidebar-accent: oklch(0.30 0.010 250);
+  --sidebar-accent: oklch(0.26 0.008 250);
   --sidebar-accent-foreground: var(--brand-lime);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: var(--brand-lime);
@@ -75,9 +75,11 @@
    LIGHT MODE — white content area, charcoal sidebar, lime accent
    ───────────────────────────────────────────────────────────────── */
 :root {
-  --background: oklch(1 0 0);
+  /* Page bg: #F4F4F2 warm off-white */
+  --background: oklch(0.965 0.003 100);
   --foreground: oklch(0.10 0.010 250);
-  --card: oklch(0.98 0.002 250);
+  /* Cards: #FFFFFF true white — pops off the warm bg */
+  --card: oklch(1 0 0);
   --card-foreground: oklch(0.10 0.010 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.10 0.010 250);
@@ -85,11 +87,11 @@
   --primary: var(--brand-lime);
   --primary-foreground: var(--brand-lime-fg);
 
-  --secondary: oklch(0.940 0.006 250);
+  --secondary: oklch(0.940 0.004 100);
   --secondary-foreground: oklch(0.15 0.010 250);
-  --muted: oklch(0.950 0.004 250);
+  --muted: oklch(0.955 0.003 100);
   --muted-foreground: oklch(0.460 0.012 250);
-  --accent: oklch(0.930 0.012 250);
+  --accent: oklch(0.930 0.005 100);
   --accent-foreground: oklch(0.12 0.020 250);
   --destructive: oklch(0.580 0.220 25);
   --border: oklch(0.10 0.008 250 / 12%);
@@ -109,21 +111,23 @@
    Sidebar vars NOT redefined here — they inherit from :root (charcoal)
    ───────────────────────────────────────────────────────────────── */
 .dark {
-  --background: oklch(0.07 0.003 250);
+  /* Page bg: #1A1A1A near-black */
+  --background: oklch(0.178 0 0);
   --foreground: oklch(0.940 0.006 250);
-  --card: oklch(0.12 0.005 250);
+  /* Cards/surfaces: #2B2B2B warm charcoal — lifts off the page */
+  --card: oklch(0.248 0 0);
   --card-foreground: oklch(0.940 0.006 250);
-  --popover: oklch(0.12 0.005 250);
+  --popover: oklch(0.248 0 0);
   --popover-foreground: oklch(0.940 0.006 250);
 
   --primary: var(--brand-lime);
   --primary-foreground: var(--brand-lime-fg);
 
-  --secondary: oklch(0.18 0.006 250);
+  --secondary: oklch(0.28 0.003 0);
   --secondary-foreground: oklch(0.900 0.006 250);
-  --muted: oklch(0.16 0.005 250);
+  --muted: oklch(0.22 0.002 0);
   --muted-foreground: oklch(0.560 0.012 250);
-  --accent: oklch(0.20 0.010 250);
+  --accent: oklch(0.26 0.003 0);
   --accent-foreground: var(--brand-lime);
   --destructive: oklch(0.650 0.200 25);
   --border: oklch(1 0 0 / 10%);

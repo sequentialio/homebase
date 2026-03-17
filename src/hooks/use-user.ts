@@ -21,10 +21,10 @@ export function getRoleOverride(): string | null {
   return v && v !== "none" ? v : null
 }
 
-export function useUser() {
+export function useUser(initialProfile: Profile | null = null) {
   const [user, setUser] = useState<User | null>(null)
-  const [rawProfile, setRawProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [rawProfile, setRawProfile] = useState<Profile | null>(initialProfile)
+  const [loading, setLoading] = useState(initialProfile === null)
   const supabase = useMemo(() => createClient(), [])
 
   // Read role override once on mount (it persists until cleared)

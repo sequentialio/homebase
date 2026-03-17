@@ -4,7 +4,6 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  LayoutDashboard,
   Wallet,
   Home,
   Calendar,
@@ -38,12 +37,6 @@ function getInitials(name: string | null | undefined): string {
 // Edit this array to change navigation items. matchPrefixes controls
 // which paths highlight this item as active.
 const navItems = [
-  {
-    label: "Overview",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    matchPrefixes: ["/dashboard"],
-  },
   {
     label: "Finances",
     href: "/finances",
@@ -90,7 +83,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
   }
 
   return (
-    <aside className="hidden md:flex md:w-60 md:flex-col bg-sidebar text-sidebar-foreground">
+    <aside className="hidden md:flex md:w-60 md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-sidebar-foreground">
           {APP_NAME}
