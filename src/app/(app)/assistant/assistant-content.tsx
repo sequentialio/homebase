@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import Image from "next/image"
 import {
-  Send, Paperclip, X, User, Loader2, Zap,
+  ArrowUp, Paperclip, X, User, Loader2, Zap,
   Plus, Menu, PanelRightClose, PanelRightOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -354,14 +354,12 @@ export function AssistantContent({ userId, initialSessions }: AssistantContentPr
             <Menu className="size-4" />
           </Button>
 
-          <div className="flex items-center justify-center size-7 rounded-lg bg-[var(--brand-lime)]/10 shrink-0 overflow-hidden">
-            <Image src="/logos/claude-logo.png" alt="Claude" width={20} height={20} className="object-contain" />
-          </div>
+          <Image src="/logos/claude-logo.png" alt="Claude" width={22} height={22} className="object-contain shrink-0" />
 
           <span className="font-semibold text-sm truncate">
             {currentSessionId
-              ? (sessions.find((s) => s.id === currentSessionId)?.title ?? "HomeBase Assistant")
-              : "HomeBase Assistant"}
+              ? (sessions.find((s) => s.id === currentSessionId)?.title ?? "Claude")
+              : "Claude"}
           </span>
 
           <div className="flex items-center gap-1 ml-auto">
@@ -413,73 +411,76 @@ export function AssistantContent({ userId, initialSessions }: AssistantContentPr
         </div>
 
         {/* Input area */}
-        <div className="shrink-0 border-t border-border bg-background px-4 md:px-6 py-3">
-          {attachments.length > 0 && (
-            <div className="flex gap-2 mb-2 flex-wrap">
-              {attachments.map((att, i) => (
-                <div key={i} className="relative group">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={att.previewUrl}
-                    alt={att.name}
-                    className="h-14 w-14 object-cover rounded-md border border-border"
-                  />
-                  <button
-                    onClick={() => removeAttachment(i)}
-                    className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full size-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="shrink-0 px-3 md:px-5 py-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
 
-          <div className="flex gap-2 items-end">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 !size-8 !min-h-0 sm:!size-auto sm:!min-h-[unset] text-muted-foreground hover:text-foreground"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isStreaming}
-              title="Attach image (e.g. receipt)"
-            >
-              <Paperclip className="size-4" />
-            </Button>
+          <div className="rounded-2xl border border-border bg-card px-2 py-2 flex flex-col gap-2">
+            {/* Image attachments preview */}
+            {attachments.length > 0 && (
+              <div className="flex gap-2 flex-wrap px-1">
+                {attachments.map((att, i) => (
+                  <div key={i} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={att.previewUrl}
+                      alt={att.name}
+                      className="h-14 w-14 object-cover rounded-md border border-border"
+                    />
+                    <button
+                      onClick={() => removeAttachment(i)}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full size-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="size-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
+            {/* Textarea */}
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask anything about your household…"
-              className="resize-none min-h-[40px] max-h-[160px] text-sm py-2"
+              className="resize-none min-h-[36px] max-h-[160px] text-sm py-1 px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent"
               rows={1}
               disabled={isStreaming}
             />
 
-            <Button
-              size="icon"
-              className="shrink-0 !size-8 !min-h-0 sm:!size-auto sm:!min-h-[unset] bg-[var(--brand-lime)] text-black hover:bg-[var(--brand-lime)]/90"
-              onClick={sendMessage}
-              disabled={isStreaming || (!input.trim() && attachments.length === 0)}
-            >
-              {isStreaming
-                ? <Loader2 className="size-4 animate-spin" />
-                : <Send className="size-4" />}
-            </Button>
+            {/* Bottom row: attach + send */}
+            <div className="flex items-center justify-between px-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                title="Attach image (e.g. receipt)"
+              >
+                <Plus className="size-5" />
+              </Button>
+
+              <Button
+                size="icon"
+                className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
+                onClick={sendMessage}
+                disabled={isStreaming || (!input.trim() && attachments.length === 0)}
+              >
+                {isStreaming
+                  ? <Loader2 className="size-4 animate-spin" />
+                  : <ArrowUp className="size-5" />}
+              </Button>
+            </div>
           </div>
-          <p className="text-[10px] text-muted-foreground text-center mt-2">
-            Enter to send · Shift+Enter for newline · Attach receipts for OCR
-          </p>
         </div>
       </div>
 
@@ -615,11 +616,9 @@ function MessageBubble({ message }: { message: Message }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-      <div className="flex items-center justify-center size-14 rounded-2xl bg-[var(--brand-lime)]/10 overflow-hidden">
-        <Image src="/logos/claude-logo.png" alt="Claude" width={40} height={40} className="object-contain" />
-      </div>
+      <Image src="/logos/claude-logo.png" alt="Claude" width={48} height={48} className="object-contain" />
       <div>
-        <h2 className="text-base font-semibold">HomeBase Assistant</h2>
+        <h2 className="text-base font-semibold">Claude</h2>
       </div>
     </div>
   )
