@@ -1,13 +1,14 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Wallet,
   Home,
   Calendar,
-  Bot,
   Settings,
+  type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Tables } from "@/types/database"
@@ -18,9 +19,17 @@ interface MobileNavProps {
   profile: Profile | null
 }
 
+interface NavItem {
+  label: string
+  href: string
+  icon?: LucideIcon
+  imageSrc?: string
+  matchPrefixes: string[]
+}
+
 // ── Nav config ────────────────────────────────────────────────────
 // Keep in sync with app-sidebar.tsx. Max 5 items for mobile bottom nav.
-const navItems = [
+const navItems: NavItem[] = [
   {
     label: "Finances",
     href: "/finances",
@@ -42,7 +51,7 @@ const navItems = [
   {
     label: "Assistant",
     href: "/assistant",
-    icon: Bot,
+    imageSrc: "/logos/claude-logo.png",
     matchPrefixes: ["/assistant"],
   },
   {
@@ -77,7 +86,20 @@ export function MobileNav({ profile }: MobileNavProps) {
                   : "text-sidebar-foreground/60"
               )}
             >
-              <item.icon className="size-5 shrink-0" />
+              {item.imageSrc ? (
+                <Image
+                  src={item.imageSrc}
+                  alt=""
+                  width={20}
+                  height={20}
+                  className={cn(
+                    "size-5 object-contain [filter:brightness(0)_invert(1)] shrink-0",
+                    !isActive && "opacity-50"
+                  )}
+                />
+              ) : item.icon ? (
+                <item.icon className="size-5 shrink-0" />
+              ) : null}
               <span className="truncate max-w-full">{item.label}</span>
             </Link>
           )

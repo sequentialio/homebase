@@ -8,10 +8,10 @@ import {
   Wallet,
   Home,
   Calendar,
-  Bot,
   Settings,
   LogOut,
   Download,
+  type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -36,10 +36,18 @@ function getInitials(name: string | null | undefined): string {
   return parts[0][0]?.toUpperCase() ?? "?"
 }
 
+interface NavItem {
+  label: string
+  href: string
+  icon?: LucideIcon
+  imageSrc?: string
+  matchPrefixes: string[]
+}
+
 // ── Nav config ────────────────────────────────────────────────────
 // Edit this array to change navigation items. matchPrefixes controls
 // which paths highlight this item as active.
-const navItems = [
+const navItems: NavItem[] = [
   {
     label: "Finances",
     href: "/finances",
@@ -59,9 +67,9 @@ const navItems = [
     matchPrefixes: ["/calendar"],
   },
   {
-    label: "AI Assistant",
+    label: "Assistant",
     href: "/assistant",
-    icon: Bot,
+    imageSrc: "/logos/claude-logo.png",
     matchPrefixes: ["/assistant"],
   },
   {
@@ -89,9 +97,14 @@ export function AppSidebar({ profile }: AppSidebarProps) {
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-sidebar-foreground">
-          <Image src="/logos/sequential_logo_design_alt.png" alt="Sequential" width={28} height={28} className="object-contain shrink-0" />
-          {APP_NAME}
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <Image
+            src="/logos/logo_navbar_1x.png"
+            alt={APP_NAME}
+            width={140}
+            height={28}
+            className="object-contain h-7 w-auto"
+          />
         </Link>
       </div>
 
@@ -109,7 +122,20 @@ export function AppSidebar({ profile }: AppSidebarProps) {
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon className="size-4" />
+              {item.imageSrc ? (
+                <Image
+                  src={item.imageSrc}
+                  alt=""
+                  width={16}
+                  height={16}
+                  className={cn(
+                    "size-4 object-contain [filter:brightness(0)_invert(1)] shrink-0",
+                    !isActive && "opacity-50"
+                  )}
+                />
+              ) : item.icon ? (
+                <item.icon className="size-4" />
+              ) : null}
               {item.label}
             </Link>
           )

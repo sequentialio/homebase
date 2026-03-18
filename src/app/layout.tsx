@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#0a0a0a" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32x32.png" />
-        <link rel="apple-touch-icon" href="/logos/sequential_logo_design_alt.png" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className={`${spaceGrotesk.variable} ${dmSans.variable} ${geistMono.variable} font-[family-name:var(--font-dm-sans)] antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
