@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import dynamic from "next/dynamic"
 import { useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -21,7 +20,6 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import type { Tables } from "@/types/database"
 
-const ThemeToggle = dynamic(() => import("./theme-toggle").then(m => m.ThemeToggle), { ssr: false })
 
 type Profile = Tables<"profiles">
 
@@ -175,18 +173,6 @@ export function SettingsContent({
             {form.formState.isSubmitting ? "Saving..." : "Save profile"}
           </Button>
         </form>
-      </section>
-
-      <div className="border-t" />
-
-      {/* ── Appearance ───────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">Appearance</h2>
-          <p className="text-sm text-muted-foreground">Light or dark mode.</p>
-        </div>
-
-        <ThemeToggle />
       </section>
 
       <div className="border-t" />
