@@ -10,6 +10,7 @@ import {
   Bot,
   Settings,
   LogOut,
+  Download,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { APP_NAME } from "@/lib/app-config"
+import { usePwaInstall } from "@/hooks/use-pwa-install"
 import type { Tables } from "@/types/database"
 
 type Profile = Tables<"profiles">
@@ -74,6 +76,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
   const router = useRouter()
   const supabase = createClient()
   const [signingOut, setSigningOut] = useState(false)
+  const { canInstall, install } = usePwaInstall()
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -137,6 +140,17 @@ export function AppSidebar({ profile }: AppSidebarProps) {
           </div>
         </Link>
         <Separator className="my-2 bg-sidebar-border" />
+        {canInstall && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-3 text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
+            onClick={install}
+          >
+            <Download className="size-4" />
+            Install App
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

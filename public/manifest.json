@@ -1,11 +1,11 @@
 {
-  "name": "Your App Name",
-  "short_name": "App",
-  "description": "Built by Sequential Analytics LLC",
+  "name": "HomeBase",
+  "short_name": "HomeBase",
+  "description": "Personal household management",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#1B3A5C",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
   "orientation": "portrait-primary",
   "icons": [
     {
