@@ -13,8 +13,8 @@ export default async function HouseholdPage() {
     { data: cleaningDuties },
     { data: profiles },
   ] = await Promise.all([
-    supabase.from("grocery_items").select("*").order("category").order("name"),
-    supabase.from("cleaning_duties").select("*").order("next_due"),
+    supabase.from("grocery_items").select("*").order("position"),
+    supabase.from("cleaning_duties").select("*").order("position"),
     supabase.from("profiles").select("id, full_name"),
   ])
 

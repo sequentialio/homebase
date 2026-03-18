@@ -10,6 +10,7 @@ import { ExpensesTab } from "./expenses-tab"
 import { IncomeTab } from "./income-tab"
 import { InsuranceTab } from "./insurance-tab"
 import { TaxesTab } from "./taxes-tab"
+import { InvestmentsTab } from "./investments-tab"
 
 type Transaction = Tables<"transactions">
 type BankAccount = Tables<"bank_accounts">
@@ -24,6 +25,8 @@ type DebtSection = Tables<"debt_sections">
 type ExpenseSection = Tables<"expense_sections">
 type TaxItem = Tables<"tax_items">
 type TaxSection = Tables<"tax_sections">
+type Investment = Tables<"investments">
+type InvestmentSection = Tables<"investment_sections">
 
 interface FinancesContentProps {
   userId: string
@@ -40,6 +43,8 @@ interface FinancesContentProps {
   initialInsurancePolicies: InsurancePolicy[]
   initialTaxItems: TaxItem[]
   initialTaxSections: TaxSection[]
+  initialInvestments: Investment[]
+  initialInvestmentSections: InvestmentSection[]
 }
 
 export function FinancesContent({
@@ -57,6 +62,8 @@ export function FinancesContent({
   initialInsurancePolicies,
   initialTaxItems,
   initialTaxSections,
+  initialInvestments,
+  initialInvestmentSections,
 }: FinancesContentProps) {
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -72,6 +79,7 @@ export function FinancesContent({
           <TabsTrigger value="income">Income</TabsTrigger>
           <TabsTrigger value="insurance">Insurance</TabsTrigger>
           <TabsTrigger value="taxes">Taxes</TabsTrigger>
+          <TabsTrigger value="investments">Investments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="transactions" className="mt-4">
@@ -122,6 +130,14 @@ export function FinancesContent({
 
         <TabsContent value="taxes" className="mt-4">
           <TaxesTab userId={userId} initialItems={initialTaxItems} initialSections={initialTaxSections} />
+        </TabsContent>
+
+        <TabsContent value="investments" className="mt-4">
+          <InvestmentsTab
+            userId={userId}
+            initialInvestments={initialInvestments}
+            initialSections={initialInvestmentSections}
+          />
         </TabsContent>
       </Tabs>
     </div>

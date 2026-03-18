@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import Image from "next/image"
 import {
-  Send, Paperclip, X, Bot, User, Loader2, Zap,
+  Send, Paperclip, X, User, Loader2, Zap,
   Plus, Menu, PanelRightClose, PanelRightOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -353,8 +354,8 @@ export function AssistantContent({ userId, initialSessions }: AssistantContentPr
             <Menu className="size-4" />
           </Button>
 
-          <div className="flex items-center justify-center size-7 rounded-lg bg-[var(--brand-lime)]/10 shrink-0">
-            <Bot className="size-3.5 text-[var(--brand-lime)]" />
+          <div className="flex items-center justify-center size-7 rounded-lg bg-[var(--brand-lime)]/10 shrink-0 overflow-hidden">
+            <Image src="/logos/claude-logo.png" alt="Claude" width={20} height={20} className="object-contain" />
           </div>
 
           <span className="font-semibold text-sm truncate">
@@ -543,7 +544,11 @@ function MessageBubble({ message }: { message: Message }) {
         "flex items-center justify-center size-7 rounded-full shrink-0 mt-0.5",
         isUser ? "bg-[var(--brand-lime)] text-black" : "bg-muted text-muted-foreground"
       )}>
-        {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
+        {isUser ? (
+          <User className="size-3.5" />
+        ) : (
+          <Image src="/logos/claude-logo.png" alt="Claude" width={16} height={16} className="object-contain" />
+        )}
       </div>
 
       <div className={cn("flex flex-col gap-1 max-w-[85%] md:max-w-[75%]", isUser && "items-end")}>
@@ -610,8 +615,8 @@ function MessageBubble({ message }: { message: Message }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-      <div className="flex items-center justify-center size-14 rounded-2xl bg-[var(--brand-lime)]/10">
-        <Bot className="size-7 text-[var(--brand-lime)]" />
+      <div className="flex items-center justify-center size-14 rounded-2xl bg-[var(--brand-lime)]/10 overflow-hidden">
+        <Image src="/logos/claude-logo.png" alt="Claude" width={40} height={40} className="object-contain" />
       </div>
       <div>
         <h2 className="text-base font-semibold">HomeBase Assistant</h2>

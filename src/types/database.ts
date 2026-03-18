@@ -10,6 +10,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
@@ -260,6 +262,8 @@ export type Database = {
           name: string
           next_due: string | null
           notes: string | null
+          position: number
+          room: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -270,6 +274,8 @@ export type Database = {
           name: string
           next_due?: string | null
           notes?: string | null
+          position?: number
+          room?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -280,6 +286,8 @@ export type Database = {
           name?: string
           next_due?: string | null
           notes?: string | null
+          position?: number
+          room?: string | null
         }
         Relationships: []
       }
@@ -441,34 +449,40 @@ export type Database = {
       grocery_items: {
         Row: {
           category: string | null
+          checked: boolean
           created_at: string
           expiry_date: string | null
           id: string
           in_pantry: boolean
           low_threshold: number | null
           name: string
+          position: number
           quantity: number
           unit: string | null
         }
         Insert: {
           category?: string | null
+          checked?: boolean
           created_at?: string
           expiry_date?: string | null
           id?: string
           in_pantry?: boolean
           low_threshold?: number | null
           name: string
+          position?: number
           quantity?: number
           unit?: string | null
         }
         Update: {
           category?: string | null
+          checked?: boolean
           created_at?: string
           expiry_date?: string | null
           id?: string
           in_pantry?: boolean
           low_threshold?: number | null
           name?: string
+          position?: number
           quantity?: number
           unit?: string | null
         }
@@ -539,6 +553,92 @@ export type Database = {
           type?: string
         }
         Relationships: []
+      }
+      investment_sections: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          position?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      investments: {
+        Row: {
+          account_number: string | null
+          account_type: string
+          as_of_date: string | null
+          balance: number
+          cost_basis: number | null
+          created_at: string | null
+          gain_loss: number | null
+          id: string
+          institution: string | null
+          name: string
+          notes: string | null
+          position: number
+          rate_of_return: number | null
+          section_id: string | null
+          user_id: string
+        }
+        Insert: {
+          account_number?: string | null
+          account_type?: string
+          as_of_date?: string | null
+          balance?: number
+          cost_basis?: number | null
+          created_at?: string | null
+          gain_loss?: number | null
+          id?: string
+          institution?: string | null
+          name: string
+          notes?: string | null
+          position?: number
+          rate_of_return?: number | null
+          section_id?: string | null
+          user_id: string
+        }
+        Update: {
+          account_number?: string | null
+          account_type?: string
+          as_of_date?: string | null
+          balance?: number
+          cost_basis?: number | null
+          created_at?: string | null
+          gain_loss?: number | null
+          id?: string
+          institution?: string | null
+          name?: string
+          notes?: string | null
+          position?: number
+          rate_of_return?: number | null
+          section_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investments_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "investment_sections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pantry_log: {
         Row: {
@@ -673,7 +773,7 @@ export type Database = {
       }
       tax_items: {
         Row: {
-          amount: number | null
+          amount: number
           created_at: string | null
           due_date: string | null
           filed: boolean
@@ -687,7 +787,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          amount?: number | null
+          amount?: number
           created_at?: string | null
           due_date?: string | null
           filed?: boolean
@@ -701,7 +801,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          amount?: number | null
+          amount?: number
           created_at?: string | null
           due_date?: string | null
           filed?: boolean
@@ -812,6 +912,7 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<

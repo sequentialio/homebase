@@ -22,6 +22,8 @@ export default async function FinancesPage() {
     { data: insurancePolicies },
     { data: taxItems },
     { data: taxSections },
+    { data: investments },
+    { data: investmentSections },
   ] = await Promise.all([
     supabase
       .from("transactions")
@@ -40,6 +42,8 @@ export default async function FinancesPage() {
     supabase.from("insurance_policies").select("*").order("name"),
     supabase.from("tax_items").select("*").eq("user_id", user.id).order("section_id").order("position"),
     supabase.from("tax_sections").select("*").eq("user_id", user.id).order("position"),
+    supabase.from("investments").select("*").eq("user_id", user.id).order("section_id").order("position"),
+    supabase.from("investment_sections").select("*").eq("user_id", user.id).order("position"),
   ])
 
   return (
@@ -58,6 +62,8 @@ export default async function FinancesPage() {
       initialInsurancePolicies={insurancePolicies ?? []}
       initialTaxItems={taxItems ?? []}
       initialTaxSections={taxSections ?? []}
+      initialInvestments={investments ?? []}
+      initialInvestmentSections={investmentSections ?? []}
     />
   )
 }

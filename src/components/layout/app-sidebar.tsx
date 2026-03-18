@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -89,6 +90,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
     <aside className="hidden md:flex md:w-60 md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-sidebar-foreground">
+          <Image src="/logos/sequential_logo_design_alt.png" alt="Sequential" width={28} height={28} className="object-contain shrink-0" />
           {APP_NAME}
         </Link>
       </div>

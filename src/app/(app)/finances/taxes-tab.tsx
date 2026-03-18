@@ -401,9 +401,9 @@ export function TaxesTab({ userId, initialItems, initialSections }: TaxesTabProp
     }
 
     if (editingItem) {
-      const { error } = await supabase.from("tax_items").update(payload).eq("id", editingItem.id)
+      const { error } = await supabase.from("tax_items").update(payload as never).eq("id", editingItem.id)
       if (error) { toast.error("Failed to update item"); return }
-      const updated = { ...editingItem, ...payload }
+      const updated = { ...editingItem, ...payload } as TaxItem
       setSections((prev) => prev.map((s) => ({
         ...s,
         items: s.items.map((i) => i.id === editingItem.id ? updated : i),
@@ -418,7 +418,7 @@ export function TaxesTab({ userId, initialItems, initialSections }: TaxesTabProp
       })()
       const { data: created, error } = await supabase
         .from("tax_items")
-        .insert({ ...payload, position })
+        .insert({ ...payload, position } as never)
         .select()
         .single()
       if (error || !created) { toast.error("Failed to add item"); return }
