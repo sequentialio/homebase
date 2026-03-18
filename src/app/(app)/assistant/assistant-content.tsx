@@ -49,6 +49,7 @@ interface ChatSession {
 
 interface AssistantContentProps {
   userId: string
+  userName: string
   initialSessions: ChatSession[]
 }
 
@@ -75,7 +76,7 @@ function formatRelativeDate(dateStr: string): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AssistantContent({ userId, initialSessions }: AssistantContentProps) {
+export function AssistantContent({ userId, userName, initialSessions }: AssistantContentProps) {
   const supabase = useMemo(() => createClient(), [])
 
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions)
@@ -390,7 +391,7 @@ export function AssistantContent({ userId, initialSessions }: AssistantContentPr
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
-          {messages.length === 0 && <EmptyState />}
+          {messages.length === 0 && <EmptyState userName={userName} />}
 
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
@@ -613,12 +614,28 @@ function MessageBubble({ message }: { message: Message }) {
   )
 }
 
-function EmptyState() {
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning"
+  if (hour < 18) return "Good afternoon"
+  return "Good evening"
+}
+
+function EmptyState({ userName }: { userName: string }) {
+  const greeting = getGreeting()
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-      <Image src="/logos/claude-logo.png" alt="Claude" width={48} height={48} className="object-contain" />
-      <div>
-        <h2 className="text-base font-semibold">Claude</h2>
+    <div className="flex flex-col items-center justify-center py-20 gap-6 text-center select-none">
+      <div className="flex items-center gap-4">
+        <Image
+          src="/logos/claude-logo.png"
+          alt="Claude"
+          width={52}
+          height={52}
+          className="object-contain opacity-90"
+        />
+        <h1 className="font-[family-name:var(--font-space-grotesk)] text-4xl md:text-5xl font-light tracking-tight text-foreground/90">
+          {greeting}, {userName}
+        </h1>
       </div>
     </div>
   )
