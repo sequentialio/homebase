@@ -401,7 +401,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
 
         {messages.length === 0 ? (
           /* ── Empty state: greeting + input centered ── */
-          <div className="flex flex-1 flex-col items-center justify-center gap-10 px-4 pb-8">
+          <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 pb-8">
             <EmptyState userName={userName} />
             <div className="w-full max-w-2xl">
               <InputCard
@@ -595,7 +595,7 @@ function getGreeting(): string {
 function EmptyState({ userName }: { userName: string }) {
   const greeting = getGreeting()
   return (
-    <div className="flex flex-col items-center justify-center py-20 gap-6 text-center select-none">
+    <div className="flex flex-col items-center justify-center text-center select-none">
       <div className="flex items-center gap-4">
         <Image
           src="/logos/claude-logo.png"
