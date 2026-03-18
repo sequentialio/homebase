@@ -87,7 +87,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
     initialSessions[0] ? storedToMessages(initialSessions[0].messages) : []
   )
   const [showSessions, setShowSessions] = useState(false)
-  const [sessionsOpen, setSessionsOpen] = useState(true)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ImageAttachment[]>([])
@@ -389,100 +389,71 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
-          {messages.length === 0 && <EmptyState userName={userName} />}
+        {/* Hidden file input — shared by both layouts */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          className="hidden"
+          onChange={handleFileChange}
+        />
 
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
-
-          {activeTools.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground pl-10">
-              <Loader2 className="size-3 animate-spin" />
-              {activeTools.map((t) => (
-                <span key={t} className="bg-muted px-2 py-0.5 rounded-full">
-                  {formatToolName(t)}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input area */}
-        <div className="shrink-0 px-3 md:px-5 py-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            className="hidden"
-            onChange={handleFileChange}
-          />
-
-          <div className="rounded-2xl border border-border bg-card px-2 py-2 flex flex-col gap-2">
-            {/* Image attachments preview */}
-            {attachments.length > 0 && (
-              <div className="flex gap-2 flex-wrap px-1">
-                {attachments.map((att, i) => (
-                  <div key={i} className="relative group">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={att.previewUrl}
-                      alt={att.name}
-                      className="h-14 w-14 object-cover rounded-md border border-border"
-                    />
-                    <button
-                      onClick={() => removeAttachment(i)}
-                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full size-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="size-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Textarea */}
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything about your household…"
-              className="resize-none min-h-[36px] max-h-[160px] text-sm py-1 px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent"
-              rows={1}
-              disabled={isStreaming}
-            />
-
-            {/* Bottom row: attach + send */}
-            <div className="flex items-center justify-between px-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming}
-                title="Attach image (e.g. receipt)"
-              >
-                <Plus className="size-5" />
-              </Button>
-
-              <Button
-                size="icon"
-                className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
-                onClick={sendMessage}
-                disabled={isStreaming || (!input.trim() && attachments.length === 0)}
-              >
-                {isStreaming
-                  ? <Loader2 className="size-4 animate-spin" />
-                  : <ArrowUp className="size-5" />}
-              </Button>
+        {messages.length === 0 ? (
+          /* ── Empty state: greeting + input centered ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-10 px-4 pb-8">
+            <EmptyState userName={userName} />
+            <div className="w-full max-w-2xl">
+              <InputCard
+                attachments={attachments}
+                input={input}
+                isStreaming={isStreaming}
+                textareaRef={textareaRef}
+                onInputChange={setInput}
+                onKeyDown={handleKeyDown}
+                onAttachClick={() => fileInputRef.current?.click()}
+                onRemoveAttachment={removeAttachment}
+                onSend={sendMessage}
+              />
             </div>
           </div>
-        </div>
+        ) : (
+          /* ── Active chat: messages scroll + input pinned bottom ── */
+          <>
+            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
+              {messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} />
+              ))}
+
+              {activeTools.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground pl-10">
+                  <Loader2 className="size-3 animate-spin" />
+                  {activeTools.map((t) => (
+                    <span key={t} className="bg-muted px-2 py-0.5 rounded-full">
+                      {formatToolName(t)}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="shrink-0 px-3 md:px-5 py-3">
+              <InputCard
+                attachments={attachments}
+                input={input}
+                isStreaming={isStreaming}
+                textareaRef={textareaRef}
+                onInputChange={setInput}
+                onKeyDown={handleKeyDown}
+                onAttachClick={() => fileInputRef.current?.click()}
+                onRemoveAttachment={removeAttachment}
+                onSend={sendMessage}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Sessions sidebar (right side on desktop, slide-from-right on mobile) ── */}
@@ -636,6 +607,85 @@ function EmptyState({ userName }: { userName: string }) {
         <h1 className="font-[family-name:var(--font-space-grotesk)] text-4xl md:text-5xl font-light tracking-tight text-foreground/90">
           {greeting}, {userName}
         </h1>
+      </div>
+    </div>
+  )
+}
+
+// ── InputCard sub-component ────────────────────────────────────────────────────
+
+interface InputCardProps {
+  attachments: { previewUrl: string; name: string }[]
+  input: string
+  isStreaming: boolean
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  onInputChange: (v: string) => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onAttachClick: () => void
+  onRemoveAttachment: (i: number) => void
+  onSend: () => void
+}
+
+function InputCard({
+  attachments, input, isStreaming, textareaRef,
+  onInputChange, onKeyDown, onAttachClick, onRemoveAttachment, onSend,
+}: InputCardProps) {
+  return (
+    <div className="rounded-2xl border border-border bg-card px-2 py-2 flex flex-col gap-2">
+      {attachments.length > 0 && (
+        <div className="flex gap-2 flex-wrap px-1">
+          {attachments.map((att, i) => (
+            <div key={i} className="relative group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={att.previewUrl}
+                alt={att.name}
+                className="h-14 w-14 object-cover rounded-md border border-border"
+              />
+              <button
+                onClick={() => onRemoveAttachment(i)}
+                className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full size-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="size-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Textarea
+        ref={textareaRef}
+        value={input}
+        onChange={(e) => onInputChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Ask anything about your household…"
+        className="resize-none min-h-[36px] max-h-[160px] text-sm py-1 px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent"
+        rows={1}
+        disabled={isStreaming}
+      />
+
+      <div className="flex items-center justify-between px-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+          onClick={onAttachClick}
+          disabled={isStreaming}
+          title="Attach image (e.g. receipt)"
+        >
+          <Plus className="size-5" />
+        </Button>
+
+        <Button
+          size="icon"
+          className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
+          onClick={onSend}
+          disabled={isStreaming || (!input.trim() && attachments.length === 0)}
+        >
+          {isStreaming
+            ? <Loader2 className="size-4 animate-spin" />
+            : <ArrowUp className="size-5" />}
+        </Button>
       </div>
     </div>
   )
