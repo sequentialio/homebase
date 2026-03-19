@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { DashboardGreeting } from "./dashboard-greeting"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -121,13 +122,6 @@ export default async function DashboardPage() {
 
   const recentTx = (transactions ?? []).slice(0, 5)
 
-  const greeting = (() => {
-    const h = now.getHours()
-    if (h < 12) return "Good morning"
-    if (h < 17) return "Good afternoon"
-    return "Good evening"
-  })()
-
   const displayName = profile?.full_name
     ? profile.full_name.split(" ")[0]
     : "there"
@@ -135,18 +129,7 @@ export default async function DashboardPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold">
-          {greeting}, {displayName}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {now.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}
-        </p>
-      </div>
+      <DashboardGreeting name={displayName} />
 
       {/* ── Stat cards ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
