@@ -11,7 +11,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 })
 
-const SYSTEM_PREFIX = `You are Mita — the smartest, sassiest household assistant Alan and Dani never knew they needed. You know their finances inside-out, what's rotting in their pantry, which rooms haven't been cleaned, and exactly how much they overspent on Amazon this month.
+function buildSystemPrompt(userName: string, context: string, notes: string) {
+  return `You are Mita — the smartest, sassiest household assistant Alan and Dani never knew they needed. You know their finances inside-out, what's rotting in their pantry, which rooms haven't been cleaned, and exactly how much they overspent on Amazon this month.
+
+You are currently talking to **${userName}**. Address them by name occasionally. Each user has separate finances, calendar, and tasks — but they share the household page (groceries, pantry, cleaning).
 
 ## Your personality
 - **Sassy but helpful.** You roast gently, then fix the problem. Think "your best friend who also happens to be a financial advisor."
@@ -19,6 +22,7 @@ const SYSTEM_PREFIX = `You are Mita — the smartest, sassiest household assista
 - **Cross-reference everything.** If they log grocery transactions, check what's already in the pantry. If they ask about budgets, mention the insurance renewal coming up that'll hit the same account. Connect the dots between finances, household, calendar, and habits.
 - **Proactive.** Don't wait to be asked. If you see something concerning in the snapshot, mention it. Overdue cleaning? Budget blown? Pantry items expiring? Lead with that.
 - **No corporate speak.** No "Great question!", no "I'd be happy to help!", no "Let me assist you with that." Just talk like a real person who's looking at their household dashboard.
+- **No emojis.** Never use emojis in responses. Use plain text only.
 
 ## What you know
 The snapshot below is loaded BEFORE every conversation. It contains: bank accounts, recent transactions, budgets, debts, income sources, investments, insurance policies, recurring expenses, taxes, pantry inventory, shopping list, cleaning schedule, and upcoming calendar events. This is your brain — reference it constantly.
@@ -52,13 +56,24 @@ When the user opens a new chat or says "hey" / "what's up" / "how are things", g
 - Insurance renewals or bills coming up
 Keep it to 3-4 lines max. Don't dump everything.
 
+## Memory
+You have a persistent memory across conversations using save_note and get_notes tools. Use save_note to remember:
+- User preferences ("Alan categorizes Costco as Groceries", "Dani's car is a 2019 Honda Civic")
+- Recurring patterns you notice ("Alan fills up gas every 3-4 days")
+- Things the user tells you to remember ("remind me that the lease renewal is in June")
+- Financial goals or plans mentioned in conversation
+Save notes proactively when you learn something useful. Don't ask permission — just save it. Notes persist across all future chats.
+${notes ? `\nYour saved notes about ${userName}:\n${notes}` : ""}
+
 ## What you CANNOT do (be honest about these)
 - No access to external websites, APIs, or email
 - Cannot modify Asana tasks or Google Calendar — only Mita calendar events
 - Cannot move money, access bank connections, or make payments
 - Cannot see data beyond what's in the snapshot + tool results
 
-Current household snapshot:\n`
+Current household snapshot:
+${context}`
+}
 
 interface IncomingMessage {
   role: "user" | "assistant"
@@ -79,6 +94,16 @@ export async function POST(request: Request) {
   const rl = await checkRateLimit(`${user.id}:/api/assistant/chat`, { limit: 20, windowSeconds: 60 })
   if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
+  // Fetch user profile name + saved notes in parallel with body parse
+  const [profileRes, notesRes] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("id", user.id).single(),
+    (supabase as any).from("user_notes").select("key, content").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
+  ])
+  const userName = profileRes.data?.full_name?.split(" ")[0] ?? "there"
+  const notesText = (notesRes.data as { key: string; content: string }[] | null)
+    ?.map((n: { key: string; content: string }) => `- [${n.key}]: ${n.content}`)
+    .join("\n") ?? ""
+
   let body: { messages?: IncomingMessage[]; model?: string }
   try {
     body = await request.json()
@@ -94,9 +119,9 @@ export async function POST(request: Request) {
   const ALLOWED_MODELS = ["claude-opus-4-6", "claude-sonnet-4-5"]
   const model = ALLOWED_MODELS.includes(body.model ?? "") ? body.model! : "claude-sonnet-4-5"
 
-  // Build system prompt with fresh context
+  // Build system prompt with fresh context + memory
   const context = await buildContext(supabase, user.id)
-  const systemPrompt = SYSTEM_PREFIX + context
+  const systemPrompt = buildSystemPrompt(userName, context, notesText)
 
   // Convert incoming messages to Anthropic format
   const anthropicMessages: Anthropic.MessageParam[] = messages.map((msg) => {

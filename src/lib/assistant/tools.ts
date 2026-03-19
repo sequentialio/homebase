@@ -237,6 +237,37 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "save_note",
+    description:
+      "Save a note to persistent memory that will be available in all future conversations. Use this proactively to remember user preferences, patterns, goals, or anything useful. If a note with the same key exists, it will be updated.",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: {
+          type: "string",
+          description: "Short descriptive key for this note (e.g. 'gas_pattern', 'grocery_preference', 'financial_goal')",
+        },
+        content: {
+          type: "string",
+          description: "The note content to remember",
+        },
+      },
+      required: ["key", "content"],
+    },
+  },
+  {
+    name: "delete_note",
+    description:
+      "Delete a saved note by key. Use when information is no longer relevant.",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key of the note to delete" },
+      },
+      required: ["key"],
+    },
+  },
+  {
     name: "add_calendar_event",
     description:
       "Add a new event to the Mita calendar.",
@@ -324,6 +355,12 @@ export async function executeTool(
 
       case "upsert_budget":
         return await upsertBudget(supabase, userId, input)
+
+      case "save_note":
+        return await saveNote(supabase, userId, input)
+
+      case "delete_note":
+        return await deleteNote(supabase, userId, input)
 
       case "add_calendar_event":
         return await addCalendarEvent(supabase, userId, input)
@@ -662,6 +699,47 @@ async function upsertBudget(
     if (error) return `Failed to add budget: ${error.message}`
     return `Budget added: ${data.category} — $${data.monthly_limit}/mo for ${data.month}/${data.year}`
   }
+}
+
+async function saveNote(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const keyErr = validateString(input.key, "Key", 100)
+  if (keyErr) return keyErr
+  const contentErr = validateString(input.content, "Content", 1000)
+  if (contentErr) return contentErr
+
+  const { error } = await (supabase as any)
+    .from("user_notes")
+    .upsert(
+      {
+        user_id: userId,
+        key: input.key as string,
+        content: input.content as string,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,key" }
+    )
+
+  if (error) return `Failed to save note: ${error.message}`
+  return `Noted: [${input.key}] saved to memory.`
+}
+
+async function deleteNote(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const { error } = await (supabase as any)
+    .from("user_notes")
+    .delete()
+    .eq("user_id", userId)
+    .eq("key", input.key as string)
+
+  if (error) return `Failed to delete note: ${error.message}`
+  return `Note [${input.key}] deleted from memory.`
 }
 
 async function addCalendarEvent(

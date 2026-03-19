@@ -34,6 +34,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     activeTools,
     model,
     setModel,
+    userAvatarUrl,
     sendMessage,
     selectSession,
     startNewChat,
@@ -273,7 +274,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
           <>
             <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+                <MessageBubble key={msg.id} message={msg} userAvatarUrl={userAvatarUrl} />
               ))}
 
               {activeTools.length > 0 && (
@@ -396,17 +397,22 @@ function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: 
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, userAvatarUrl }: { message: Message; userAvatarUrl?: string | null }) {
   const isUser = message.role === "user"
 
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <div className={cn(
-        "flex items-center justify-center size-7 rounded-full shrink-0 mt-0.5",
+        "flex items-center justify-center size-7 rounded-full shrink-0 mt-0.5 overflow-hidden",
         isUser ? "bg-[var(--brand-lime)] text-black" : "bg-muted text-muted-foreground"
       )}>
         {isUser ? (
-          <User className="size-3.5" />
+          userAvatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={userAvatarUrl} alt="You" className="size-7 rounded-full object-cover" />
+          ) : (
+            <User className="size-3.5" />
+          )
         ) : (
           <Image src="/logos/claude-logo.png" alt="Claude" width={16} height={16} className="object-contain" />
         )}

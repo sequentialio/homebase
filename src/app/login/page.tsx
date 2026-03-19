@@ -11,13 +11,24 @@ import { Label } from "@/components/ui/label"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
 } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { APP_VERSION, APP_CREATOR } from "@/lib/app-config"
 
+const USERS = [
+  { name: "Alan", email: "info@sequentialanalytics.io" },
+  { name: "Dani", email: "danielle.l.sanchez15@gmail.com" },
+]
+
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
+  const [selectedUser, setSelectedUser] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -27,16 +38,23 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    if (!selectedUser) {
+      setError("Please select a user")
+      return
+    }
     setLoading(true)
 
-    // Optional: add domain restriction here
-    // if (!email.endsWith("@yourcompany.com")) {
-    //   setError("Please use your company email address")
-    //   setLoading(false)
-    //   return
-    // }
+    const user = USERS.find((u) => u.name === selectedUser)
+    if (!user) {
+      setError("Invalid user")
+      setLoading(false)
+      return
+    }
 
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password,
+    })
 
     if (authError) {
       setError(authError.message)
@@ -51,7 +69,7 @@ export default function LoginPage() {
   return (
     <div className="dark flex min-h-screen items-center justify-center px-4 bg-black">
       <Card className="w-full max-w-sm shadow-lg border border-white/10">
-        <CardHeader className="text-center items-center gap-4 pb-6">
+        <CardHeader className="text-center items-center pb-2">
           <Image
             src="/logos/mita_full_cropped.png"
             alt="MITA"
@@ -59,27 +77,29 @@ export default function LoginPage() {
             height={96}
             className="object-contain h-14 w-auto mx-auto block"
           />
-          <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
+              <Label>Who&apos;s signing in?</Label>
+              <Select value={selectedUser} onValueChange={setSelectedUser}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select user" />
+                </SelectTrigger>
+                <SelectContent>
+                  {USERS.map((u) => (
+                    <SelectItem key={u.name} value={u.name}>
+                      {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
                 <Link href="/forgot-password" className="text-xs text-muted-foreground hover:underline">
-                  Forgot password?
+                  I&apos;m a dodo, what&apos;s my password?
                 </Link>
               </div>
               <Input
@@ -92,7 +112,7 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !selectedUser}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>

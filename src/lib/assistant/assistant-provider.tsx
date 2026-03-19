@@ -81,6 +81,8 @@ interface AssistantContextValue {
   activeTools: string[]
   model: AssistantModel
   setModel: (m: AssistantModel) => void
+  userName?: string
+  userAvatarUrl?: string | null
   sendMessage: (text: string, images: ImageAttachment[], csvFiles?: { name: string; content: string }[]) => Promise<void>
   selectSession: (session: ChatSession) => void
   startNewChat: (focusCb?: () => void) => void
@@ -98,10 +100,12 @@ export function useAssistant() {
 
 interface AssistantProviderProps {
   userId: string
+  userName?: string
+  userAvatarUrl?: string | null
   children: ReactNode
 }
 
-export function AssistantProvider({ userId, children }: AssistantProviderProps) {
+export function AssistantProvider({ userId, userName, userAvatarUrl, children }: AssistantProviderProps) {
   const supabase = useMemo(() => createClient(), [])
 
   const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -444,6 +448,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         isStreaming,
         activeTools,
         model, setModel,
+        userName, userAvatarUrl,
         sendMessage,
         selectSession,
         startNewChat,

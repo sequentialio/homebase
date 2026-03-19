@@ -20,7 +20,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <AssistantProvider userId={user?.id ?? ""}>
+    <AssistantProvider
+      userId={user?.id ?? ""}
+      userName={profile?.full_name?.split(" ")[0]}
+      userAvatarUrl={profile?.avatar_url}
+    >
       <AppShell initialProfile={profile}>
         {children}
         <Toaster />

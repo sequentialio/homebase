@@ -18,6 +18,8 @@ import {
   GripVertical,
   ChevronDown,
   ChevronRight,
+  FolderPlus,
+  ListPlus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   DndContext,
   DragOverlay,
@@ -164,11 +172,11 @@ function SortableRow({
       {/* Shopping checkbox */}
       {view === "shopping" && (
         <button
-          className="shrink-0 size-5 rounded border border-border flex items-center justify-center hover:border-primary transition-colors"
+          className="shrink-0 size-5 rounded-full border-2 border-border flex items-center justify-center hover:border-primary transition-colors"
           onClick={() => onCheck(item)}
           aria-label={checked ? "Uncheck item" : "Check item"}
         >
-          {checked && <div className="size-2.5 rounded-sm bg-primary" />}
+          {checked && <div className="size-2.5 rounded-full bg-primary" />}
         </button>
       )}
 
@@ -287,6 +295,9 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const [customCategories, setCustomCategories] = useState<string[]>([])
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -352,6 +363,11 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
       }
     }
 
+    // Include empty custom categories as drop targets
+    for (const cat of customCategories) {
+      if (!map.has(cat)) map.set(cat, [])
+    }
+
     // Move "Uncategorized" to the bottom
     const ordered: [string, GroceryItem[]][] = []
     for (const [k, v] of map) {
@@ -360,7 +376,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
     if (map.has(UNCATEGORIZED)) ordered.push([UNCATEGORIZED, map.get(UNCATEGORIZED)!])
 
     return ordered
-  }, [viewItems, categoryFilter, view])
+  }, [viewItems, categoryFilter, view, customCategories])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -466,6 +482,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
     } else {
       // Cross-group: category already updated in onDragOver — persist new category + positions
       const newCategory = overContainer === UNCATEGORIZED ? null : overContainer
+      const sourceContainer = activeContainer
 
       const updateCategory = async () => {
         const { error } = await supabase
@@ -477,11 +494,17 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
           return
         }
 
-        // Persist positions for destination group
+        // Persist positions for BOTH source and destination groups
         const destItems = itemsRef.current.filter(
           (i) => (i.category ?? UNCATEGORIZED) === overContainer
         )
-        await persistPositions(destItems)
+        const sourceItems = itemsRef.current.filter(
+          (i) => (i.category ?? UNCATEGORIZED) === sourceContainer && i.id !== active.id
+        )
+        await Promise.all([
+          persistPositions(destItems),
+          persistPositions(sourceItems),
+        ])
       }
 
       void updateCategory()
@@ -503,18 +526,31 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
     },
   })
 
-  function openAdd() {
+  function openAdd(presetCategory?: string) {
     form.reset({
       name: "",
       quantity: 1,
       unit: "",
-      category: "",
+      category: presetCategory ?? "",
       in_pantry: view === "pantry",
       low_threshold: null,
       expiry_date: null,
     })
     setEditing(null)
     setOpen(true)
+  }
+
+  function handleAddCategory() {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+    if (customCategories.includes(trimmed) || categories.includes(trimmed)) {
+      toast.error("Category already exists")
+      return
+    }
+    setCustomCategories((prev) => [...prev, trimmed])
+    setNewCategoryName("")
+    setCategoryDialogOpen(false)
+    toast.success(`Category "${trimmed}" added`)
   }
 
   function openEdit(item: GroceryItem) {
@@ -709,9 +745,21 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
             </Button>
           )}
         </div>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="size-4 mr-1" /> Add
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm">
+              <Plus className="size-4 mr-1" /> Add
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => openAdd()}>
+              <ListPlus className="size-4 mr-2" /> Add Item
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setCategoryDialogOpen(true)}>
+              <FolderPlus className="size-4 mr-2" /> Add Category
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* List */}
@@ -740,7 +788,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
                 <div key={groupKey} className="space-y-1">
                   {/* Group header */}
                   <button
-                    className="flex items-center gap-1.5 w-full text-left py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1.5 w-full text-left py-1.5 text-xs font-semibold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
                     onClick={() => toggleGroup(groupKey)}
                   >
                     {isCollapsed ? (
@@ -749,7 +797,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
                       <ChevronDown className="size-3.5 shrink-0" />
                     )}
                     <span>{groupKey}</span>
-                    <span className="font-normal normal-case tracking-normal">
+                    <span className="font-normal normal-case tracking-normal text-muted-foreground">
                       ({groupItems.length})
                     </span>
                   </button>
@@ -805,7 +853,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
         </DndContext>
       )}
 
-      {/* Dialog */}
+      {/* Item Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -885,6 +933,40 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
               </Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Category Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Category</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleAddCategory()
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-1.5">
+              <Label>Category name</Label>
+              <Input
+                placeholder="e.g. Snacks, Frozen, Personal Care"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCategoryDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!newCategoryName.trim()}>
+                Add
               </Button>
             </DialogFooter>
           </form>
