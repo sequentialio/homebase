@@ -112,6 +112,35 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "upsert_investment",
+    description:
+      "Add a new investment account or update an existing one. Use this when the user shares investment details (e.g. from a screenshot or statement). If updating, provide the id of the existing record.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Existing investment ID to update (omit to create new)",
+        },
+        name: { type: "string", description: "Account name (e.g. 'Principal 403(b)')" },
+        institution: { type: "string", description: "Financial institution (e.g. 'Principal')" },
+        account_type: {
+          type: "string",
+          enum: ["401k", "403b", "IRA", "Roth IRA", "Roth 401k", "Brokerage", "HSA", "Crypto", "Pension", "Other"],
+          description: "Type of investment account",
+        },
+        balance: { type: "number", description: "Current balance in dollars" },
+        cost_basis: { type: "number", description: "Total amount contributed / cost basis" },
+        gain_loss: { type: "number", description: "Total or YTD gain/loss in dollars" },
+        rate_of_return: { type: "number", description: "Rate of return as a percentage (e.g. 1.11 for 1.11%)" },
+        as_of_date: { type: "string", description: "Date the balance was recorded (YYYY-MM-DD)" },
+        account_number: { type: "string", description: "Last 4 digits or masked account number (optional)" },
+        notes: { type: "string", description: "Any additional notes" },
+      },
+      required: ["name", "account_type", "balance"],
+    },
+  },
+  {
     name: "add_calendar_event",
     description:
       "Add a new event to the Mita calendar.",
@@ -163,6 +192,9 @@ export async function executeTool(
       case "add_to_shopping_list":
         return await addToShoppingList(supabase, input)
 
+      case "upsert_investment":
+        return await upsertInvestment(supabase, userId, input)
+
       case "add_calendar_event":
         return await addCalendarEvent(supabase, userId, input)
 
@@ -185,7 +217,7 @@ async function getFinances(
     .toISOString()
     .split("T")[0]
 
-  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes] =
+  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes] =
     await Promise.all([
       supabase.from("bank_accounts").select("*"),
       supabase
@@ -196,6 +228,7 @@ async function getFinances(
       supabase.from("budgets").select("*"),
       supabase.from("debts").select("*"),
       supabase.from("income_sources").select("*").eq("active", true),
+      supabase.from("investments").select("*").order("name"),
     ])
 
   return JSON.stringify({
@@ -204,6 +237,7 @@ async function getFinances(
     budgets: budgetsRes.data ?? [],
     debts: debtsRes.data ?? [],
     income_sources: incomeRes.data ?? [],
+    investments: investmentsRes.data ?? [],
     period_days: days,
   })
 }
@@ -312,6 +346,47 @@ async function addToShoppingList(
 
   if (error) return `Failed to add items: ${error.message}`
   return `Added ${data.length} item(s) to shopping list: ${data.map((d) => d.name).join(", ")}`
+}
+
+async function upsertInvestment(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    institution: (input.institution as string) ?? null,
+    account_type: input.account_type as string,
+    balance: Number(input.balance),
+    cost_basis: input.cost_basis != null ? Number(input.cost_basis) : null,
+    gain_loss: input.gain_loss != null ? Number(input.gain_loss) : null,
+    rate_of_return: input.rate_of_return != null ? Number(input.rate_of_return) : null,
+    as_of_date: (input.as_of_date as string) ?? null,
+    account_number: (input.account_number as string) ?? null,
+    notes: (input.notes as string) ?? null,
+  }
+
+  if (id) {
+    const { error, data } = await supabase
+      .from("investments")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) return `Failed to update investment: ${error.message}`
+    return `Investment updated: "${data.name}" — balance $${data.balance}${data.as_of_date ? ` as of ${data.as_of_date}` : ""}`
+  } else {
+    const { error, data } = await supabase
+      .from("investments")
+      .insert(payload)
+      .select()
+      .single()
+    if (error) return `Failed to add investment: ${error.message}`
+    return `Investment added: "${data.name}" (${data.account_type}) — balance $${data.balance}${data.as_of_date ? ` as of ${data.as_of_date}` : ""}`
+  }
 }
 
 async function addCalendarEvent(
