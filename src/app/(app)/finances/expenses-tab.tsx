@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -87,6 +87,76 @@ interface ExpensesTabProps {
   initialExpenses: RecurringExpense[]
   initialSections: ExpenseSection[]
   accounts: BankAccount[]
+}
+
+// ── Category combobox (type-ahead + presets) ──────────────────────────────
+
+function CategoryCombobox({
+  value,
+  onChange,
+  existingCategories,
+}: {
+  value: string
+  onChange: (v: string) => void
+  existingCategories: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [inputValue, setInputValue] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Merge preset + user-created categories, dedupe, sort
+  const allCategories = useMemo(() => {
+    const set = new Set([...(EXPENSE_CATEGORIES as unknown as string[]), ...existingCategories])
+    return [...set].sort()
+  }, [existingCategories])
+
+  const filtered = useMemo(() => {
+    if (!inputValue) return allCategories
+    const q = inputValue.toLowerCase()
+    return allCategories.filter((c) => c.toLowerCase().includes(q))
+  }, [inputValue, allCategories])
+
+  const handleSelect = useCallback((cat: string) => {
+    setInputValue(cat)
+    onChange(cat)
+    setOpen(false)
+  }, [onChange])
+
+  return (
+    <div className="relative">
+      <Input
+        ref={inputRef}
+        value={inputValue}
+        placeholder="Type or select..."
+        onChange={(e) => {
+          setInputValue(e.target.value)
+          onChange(e.target.value)
+          if (!open) setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          // Delay so click on dropdown item registers first
+          setTimeout(() => setOpen(false), 150)
+        }}
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+          {filtered.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function buildSections(
@@ -417,6 +487,13 @@ export function ExpensesTab({
   }, [sections, unsectioned])
 
   const annualTotal = monthlyTotal * 12
+
+  // Collect all unique categories from existing expenses (for combobox suggestions)
+  const existingCategories = useMemo(() => {
+    const all = [...sections.flatMap((s) => s.expenses), ...unsectioned]
+    const cats = new Set(all.map((e) => e.category).filter(Boolean) as string[])
+    return [...cats].sort()
+  }, [sections, unsectioned])
 
   function findContainer(id: string): string {
     for (const sec of sectionsRef.current) {
@@ -864,20 +941,11 @@ export function ExpensesTab({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Category</Label>
-                <Select
-                  value={form.watch("category") ?? "none"}
-                  onValueChange={(v) => form.setValue("category", v === "none" ? null : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No category</SelectItem>
-                    {EXPENSE_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CategoryCombobox
+                  value={form.watch("category") ?? ""}
+                  onChange={(v) => form.setValue("category", v || null)}
+                  existingCategories={existingCategories}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Billing Day</Label>
