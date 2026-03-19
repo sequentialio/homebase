@@ -39,7 +39,7 @@ export default async function FinancesPage() {
     supabase.from("recurring_expenses").select("*").eq("user_id", user.id).order("section_id").order("position"),
     supabase.from("expense_sections").select("*").eq("user_id", user.id).order("position"),
     supabase.from("income_sources").select("*").order("name"),
-    supabase.from("insurance_policies").select("*").order("name"),
+    supabase.from("insurance_policies").select("*").eq("user_id", user.id).order("name"),
     supabase.from("tax_items").select("*").eq("user_id", user.id).order("section_id").order("position"),
     supabase.from("tax_sections").select("*").eq("user_id", user.id).order("position"),
     supabase.from("investments").select("*").eq("user_id", user.id).order("section_id").order("position"),

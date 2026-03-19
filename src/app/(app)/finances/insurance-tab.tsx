@@ -49,10 +49,11 @@ function daysUntil(dateStr: string | null): number | null {
 }
 
 interface InsuranceTabProps {
+  userId: string
   initialInsurancePolicies: InsurancePolicy[]
 }
 
-export function InsuranceTab({ initialInsurancePolicies }: InsuranceTabProps) {
+export function InsuranceTab({ userId, initialInsurancePolicies }: InsuranceTabProps) {
   const supabase = useMemo(() => createClient(), [])
   const [policies, setPolicies] = useState<InsurancePolicy[]>(initialInsurancePolicies)
   const [open, setOpen] = useState(false)
@@ -87,6 +88,7 @@ export function InsuranceTab({ initialInsurancePolicies }: InsuranceTabProps) {
 
   async function onSubmit(values: FormValues) {
     const payload = {
+      user_id: userId,
       name: values.name,
       type: values.type,
       provider: values.provider || null,

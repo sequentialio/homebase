@@ -125,7 +125,7 @@ export function FinancesContent({
         </TabsContent>
 
         <TabsContent value="insurance" className="mt-4">
-          <InsuranceTab initialInsurancePolicies={initialInsurancePolicies} />
+          <InsuranceTab userId={userId} initialInsurancePolicies={initialInsurancePolicies} />
         </TabsContent>
 
         <TabsContent value="taxes" className="mt-4">
