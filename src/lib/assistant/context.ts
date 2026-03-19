@@ -1,10 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 
+// Per-instance cache (ephemeral on Vercel — new instance = fresh cache)
+const contextCache = new Map<string, { text: string; expiresAt: number }>()
+const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes
+
 export async function buildContext(
   supabase: SupabaseClient<Database>,
   userId: string
 ): Promise<string> {
+  const cached = contextCache.get(userId)
+  if (cached && cached.expiresAt > Date.now()) return cached.text
   const today = new Date()
   const year = today.getFullYear()
   const month = today.getMonth() + 1
@@ -202,5 +208,7 @@ export async function buildContext(
     lines.push("")
   }
 
-  return lines.join("\n")
+  const result = lines.join("\n")
+  contextCache.set(userId, { text: result, expiresAt: Date.now() + CACHE_TTL_MS })
+  return result
 }

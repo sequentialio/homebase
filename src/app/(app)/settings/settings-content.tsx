@@ -112,7 +112,16 @@ export function SettingsContent({
           .catch(() => {})
       }
     } else if (status === "error") {
-      toast.error(`Connection failed${reason ? `: ${reason}` : ""}`)
+      const KNOWN_REASONS: Record<string, string> = {
+        token_exchange: "Token exchange failed",
+        db_error: "Database error",
+        state_mismatch: "Security check failed",
+        missing_params: "Missing parameters",
+        no_refresh_token: "No refresh token returned",
+        unknown: "Unknown error",
+      }
+      const displayReason = reason ? KNOWN_REASONS[reason] ?? "Connection failed" : null
+      toast.error(`${label} connection failed${displayReason ? `: ${displayReason}` : ""}`)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
