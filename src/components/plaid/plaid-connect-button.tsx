@@ -10,67 +10,89 @@ interface PlaidConnectButtonProps {
   onSuccess?: () => void
 }
 
+// Mounted only when a real token exists — usePlaidLink always gets a valid token
+function PlaidLinkOpener({
+  token,
+  onSuccess,
+  onExit,
+}: {
+  token: string
+  onSuccess: (public_token: string, metadata: { institution: { name: string; institution_id: string } | null }) => void
+  onExit: () => void
+}) {
+  const { open, ready } = usePlaidLink({ token, onSuccess, onExit })
+
+  useEffect(() => {
+    if (ready) open()
+  }, [ready, open])
+
+  return null
+}
+
 export function PlaidConnectButton({ onSuccess }: PlaidConnectButtonProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const fetchLinkToken = useCallback(async () => {
+  const handleClick = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch("/api/plaid/create-link-token", { method: "POST" })
       const data = await res.json()
-      if (data.link_token) setLinkToken(data.link_token)
-      else toast.error("Failed to initialize bank connection")
+      if (data.link_token) {
+        setLinkToken(data.link_token)
+      } else {
+        toast.error("Failed to initialize bank connection")
+        setLoading(false)
+      }
     } catch {
       toast.error("Failed to initialize bank connection")
-    } finally {
       setLoading(false)
     }
   }, [])
 
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess: async (public_token, metadata) => {
-      setLoading(true)
-      try {
-        const res = await fetch("/api/plaid/exchange-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            public_token,
-            institution: metadata.institution,
-          }),
-        })
-        const data = await res.json()
-        if (data.success) {
-          toast.success(`Connected ${data.institution_name} — ${data.accounts_connected} account${data.accounts_connected !== 1 ? "s" : ""}`)
-          onSuccess?.()
-        } else {
-          toast.error("Failed to connect bank")
-        }
-      } catch {
+  const handleSuccess = useCallback(async (
+    public_token: string,
+    metadata: { institution: { name: string; institution_id: string } | null }
+  ) => {
+    try {
+      const res = await fetch("/api/plaid/exchange-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ public_token, institution: metadata.institution }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Connected ${data.institution_name} — ${data.accounts_connected} account${data.accounts_connected !== 1 ? "s" : ""}`)
+        onSuccess?.()
+      } else {
         toast.error("Failed to connect bank")
-      } finally {
-        setLoading(false)
-        setLinkToken(null)
       }
-    },
-    onExit: () => setLinkToken(null),
-  })
+    } catch {
+      toast.error("Failed to connect bank")
+    } finally {
+      setLinkToken(null)
+      setLoading(false)
+    }
+  }, [onSuccess])
 
-  // Auto-open Plaid Link once token is fetched and SDK is ready
-  useEffect(() => {
-    if (linkToken && ready) open()
-  }, [linkToken, ready, open])
-
-  const handleClick = useCallback(async () => {
-    await fetchLinkToken()
-  }, [fetchLinkToken])
+  const handleExit = useCallback(() => {
+    setLinkToken(null)
+    setLoading(false)
+  }, [])
 
   return (
-    <Button onClick={handleClick} disabled={loading} variant="outline" className="gap-2">
-      {loading ? <Loader2 className="size-4 animate-spin" /> : <Landmark className="size-4" />}
-      Connect Bank Account
-    </Button>
+    <>
+      {linkToken && (
+        <PlaidLinkOpener
+          token={linkToken}
+          onSuccess={handleSuccess}
+          onExit={handleExit}
+        />
+      )}
+      <Button onClick={handleClick} disabled={loading} variant="outline" className="gap-2">
+        {loading ? <Loader2 className="size-4 animate-spin" /> : <Landmark className="size-4" />}
+        Connect Bank Account
+      </Button>
+    </>
   )
 }
