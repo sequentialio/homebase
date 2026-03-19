@@ -84,6 +84,7 @@ interface AssistantContextValue {
   userName?: string
   userAvatarUrl?: string | null
   sendMessage: (text: string, images: ImageAttachment[], csvFiles?: { name: string; content: string }[]) => Promise<void>
+  stopStreaming: () => void
   selectSession: (session: ChatSession) => void
   startNewChat: (focusCb?: () => void) => void
 }
@@ -113,6 +114,7 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeTools, setActiveTools] = useState<string[]>([])
+  const abortRef = useRef<AbortController | null>(null)
   const [model, setModelState] = useState<AssistantModel>(() => {
     if (typeof window === "undefined") return "claude-sonnet-4-5"
     return (localStorage.getItem("assistant_model") as AssistantModel) ?? "claude-sonnet-4-5"
@@ -258,12 +260,15 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
     let pendingText = ""
     let rafHandle: number | null = null
+    const abortController = new AbortController()
+    abortRef.current = abortController
 
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history, model }),
+        signal: abortController.signal,
       })
 
       if (!res.ok) {
@@ -403,12 +408,19 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
           return updated
         })
       }
-      const msg = err instanceof Error ? err.message : "Something went wrong"
-      toast.error(msg)
+      const isAbort = err instanceof DOMException && err.name === "AbortError"
+      if (!isAbort) {
+        const msg = err instanceof Error ? err.message : "Something went wrong"
+        toast.error(msg)
+      }
       setMessages((prev) => {
         const updated = prev.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: m.content || "Sorry, something went wrong. Please try again.", streaming: false }
+            ? {
+                ...m,
+                content: m.content || (isAbort ? "Stopped." : "Sorry, something went wrong. Please try again."),
+                streaming: false,
+              }
             : m
         )
         finalMessages = updated
@@ -417,12 +429,17 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
     } finally {
       if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null }
       try { reader?.cancel() } catch { /* ignore */ }
+      abortRef.current = null
       setIsStreaming(false)
       setActiveTools([])
       await saveSession(finalMessages)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming, messages, model, saveSession])
+
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
   // ── Session navigation ─────────────────────────────────────────────────────
 
@@ -450,6 +467,7 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
         model, setModel,
         userName, userAvatarUrl,
         sendMessage,
+        stopStreaming,
         selectSession,
         startNewChat,
       }}

@@ -35,7 +35,7 @@ export async function buildContext(
     taxRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
-    supabase.from("bank_accounts").select("name, balance, currency"),
+    supabase.from("bank_accounts").select("id, name, balance, currency"),
     supabase
       .from("transactions")
       .select("type, amount, category, description, date")
@@ -103,9 +103,9 @@ export async function buildContext(
 
   // Bank accounts
   if (accountsRes.data?.length) {
-    lines.push("## Bank Accounts")
+    lines.push("## Bank Accounts (use account_id when logging transactions)")
     for (const a of accountsRes.data) {
-      lines.push(`- ${a.name}: $${a.balance.toFixed(2)} ${a.currency}`)
+      lines.push(`- ${a.name}: $${a.balance.toFixed(2)} ${a.currency} [account_id: ${a.id}]`)
     }
     const total = accountsRes.data.reduce((s, a) => s + a.balance, 0)
     lines.push(`Total liquid: $${total.toFixed(2)}`)

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import {
-  ArrowUp, Paperclip, X, User, Loader2, Zap,
+  ArrowUp, Paperclip, X, User, Loader2, Zap, Square,
   Plus, Menu, PanelRightClose, PanelRightOpen, FileText, ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     setModel,
     userAvatarUrl,
     sendMessage,
+    stopStreaming,
     selectSession,
     startNewChat,
   } = useAssistant()
@@ -266,6 +267,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
                 onRemoveAttachment={removeAttachment}
                 onRemoveCsv={(i) => setCsvAttachments((prev) => prev.filter((_, idx) => idx !== i))}
                 onSend={handleSend}
+                onStop={stopStreaming}
               />
             </div>
           </div>
@@ -305,6 +307,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
                 onRemoveAttachment={removeAttachment}
                 onRemoveCsv={(i) => setCsvAttachments((prev) => prev.filter((_, idx) => idx !== i))}
                 onSend={handleSend}
+                onStop={stopStreaming}
               />
             </div>
           </>
@@ -536,11 +539,12 @@ interface InputCardProps {
   onRemoveAttachment: (i: number) => void
   onRemoveCsv: (i: number) => void
   onSend: () => void
+  onStop: () => void
 }
 
 function InputCard({
   attachments, csvAttachments, input, isStreaming, textareaRef,
-  onInputChange, onKeyDown, onPaste, onAttachClick, onRemoveAttachment, onRemoveCsv, onSend,
+  onInputChange, onKeyDown, onPaste, onAttachClick, onRemoveAttachment, onRemoveCsv, onSend, onStop,
 }: InputCardProps) {
   const hasAttachments = attachments.length > 0 || csvAttachments.length > 0
   return (
@@ -602,16 +606,25 @@ function InputCard({
           <Plus className="size-5" />
         </Button>
 
-        <Button
-          size="icon"
-          className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
-          onClick={onSend}
-          disabled={isStreaming || (!input.trim() && attachments.length === 0 && csvAttachments.length === 0)}
-        >
-          {isStreaming
-            ? <Loader2 className="size-4 animate-spin" />
-            : <ArrowUp className="size-5" />}
-        </Button>
+        {isStreaming ? (
+          <Button
+            size="icon"
+            className="size-9 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+            onClick={onStop}
+            title="Stop"
+          >
+            <Square className="size-3.5 fill-current" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
+            onClick={onSend}
+            disabled={!input.trim() && attachments.length === 0 && csvAttachments.length === 0}
+          >
+            <ArrowUp className="size-5" />
+          </Button>
+        )}
       </div>
     </div>
   )

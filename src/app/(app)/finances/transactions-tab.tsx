@@ -34,10 +34,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import type { Tables } from "@/types/database"
 
-type Transaction = Tables<"transactions">
+type Transaction = Tables<"transactions"> & { scope?: string }
 type BankAccount = Tables<"bank_accounts">
 
 const schema = z.object({
@@ -47,6 +46,7 @@ const schema = z.object({
   description: z.string().optional(),
   date: z.string().min(1, "Date is required"),
   account_id: z.string().optional(),
+  scope: z.enum(["personal", "business"]),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -61,12 +61,6 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ]
 
-const TYPE_COLORS: Record<string, string> = {
-  income: "bg-green-500/10 text-green-600 dark:text-green-400",
-  expense: "bg-red-500/10 text-red-600 dark:text-red-400",
-  transfer: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-}
-
 export function TransactionsTab({ userId, initialTransactions, accounts }: TransactionsTabProps) {
   const supabase = useMemo(() => createClient(), [])
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions)
@@ -75,16 +69,22 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const now = new Date()
-  const [filterMonth, setFilterMonth] = useState(now.getMonth())
-  const [filterYear, setFilterYear] = useState(now.getFullYear())
+  const [filterMonth, setFilterMonth] = useState<number | "all">(now.getMonth())
+  const [filterYear, setFilterYear] = useState<number | "all">(now.getFullYear())
+  const [filterScope, setFilterScope] = useState<string>("all")
+  const [filterAccount, setFilterAccount] = useState<string>("all")
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
       if (!t.date) return false
       const [y, m] = t.date.split("-").map(Number)
-      return y === filterYear && m === filterMonth + 1
+      if (filterYear !== "all" && y !== filterYear) return false
+      if (filterMonth !== "all" && m !== (filterMonth as number) + 1) return false
+      if (filterScope !== "all" && (t.scope ?? "personal") !== filterScope) return false
+      if (filterAccount !== "all" && t.account_id !== filterAccount) return false
+      return true
     })
-  }, [transactions, filterMonth, filterYear])
+  }, [transactions, filterMonth, filterYear, filterScope, filterAccount])
 
   const totals = useMemo(() => {
     return filtered.reduce(
@@ -107,6 +107,7 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       description: "",
       date: new Date().toISOString().split("T")[0],
       account_id: "",
+      scope: "personal",
     },
   })
 
@@ -118,6 +119,7 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       description: "",
       date: new Date().toISOString().split("T")[0],
       account_id: "",
+      scope: "personal",
     })
     setEditing(null)
     setOpen(true)
@@ -131,6 +133,7 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       description: t.description ?? "",
       date: t.date,
       account_id: t.account_id ?? "",
+      scope: (t.scope as "personal" | "business") ?? "personal",
     })
     setEditing(t)
     setOpen(true)
@@ -145,12 +148,13 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       description: values.description || null,
       date: values.date,
       account_id: values.account_id || null,
+      scope: values.scope,
     }
 
     if (editing) {
       const { data, error } = await supabase
         .from("transactions")
-        .update(payload)
+        .update(payload as never)
         .eq("id", editing.id)
         .select()
         .single()
@@ -160,7 +164,7 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     } else {
       const { data, error } = await supabase
         .from("transactions")
-        .insert(payload)
+        .insert(payload as never)
         .select()
         .single()
       if (error) { toast.error("Failed to add transaction"); return }
@@ -179,7 +183,22 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     setDeleting(null)
   }
 
-  const years = Array.from({ length: 3 }, (_, i) => now.getFullYear() - i)
+  // Build year options from actual data
+  const years = useMemo(() => {
+    const ySet = new Set(transactions.map((t) => {
+      if (!t.date) return now.getFullYear()
+      return Number(t.date.split("-")[0])
+    }))
+    ySet.add(now.getFullYear())
+    return Array.from(ySet).sort((a, b) => b - a)
+  }, [transactions, now])
+
+  // Build account lookup
+  const accountMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const a of accounts) m.set(a.id, a.name)
+    return m
+  }, [accounts])
 
   return (
     <div className="space-y-4">
@@ -203,27 +222,52 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2">
-          <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(Number(v))}>
-            <SelectTrigger className="w-24">
+        <div className="flex gap-2 flex-wrap">
+          <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(v === "all" ? "all" : Number(v))}>
+            <SelectTrigger className="w-24 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All months</SelectItem>
               {MONTHS.map((m, i) => (
                 <SelectItem key={i} value={String(i)}>{m}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={String(filterYear)} onValueChange={(v) => setFilterYear(Number(v))}>
-            <SelectTrigger className="w-24">
+          <Select value={String(filterYear)} onValueChange={(v) => setFilterYear(v === "all" ? "all" : Number(v))}>
+            <SelectTrigger className="w-24 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All years</SelectItem>
               {years.map((y) => (
                 <SelectItem key={y} value={String(y)}>{y}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterScope} onValueChange={setFilterScope}>
+            <SelectTrigger className="w-28 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All scopes</SelectItem>
+              <SelectItem value="personal">Personal</SelectItem>
+              <SelectItem value="business">Business</SelectItem>
+            </SelectContent>
+          </Select>
+          {accounts.length > 0 && (
+            <Select value={filterAccount} onValueChange={setFilterAccount}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <Button size="sm" onClick={openAdd}>
           <Plus className="size-4 mr-1" /> Add
@@ -233,7 +277,7 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground text-sm">
-          No transactions for {MONTHS[filterMonth]} {filterYear}
+          No transactions match the selected filters
         </div>
       ) : (
         <div className="rounded-lg border overflow-x-auto">
@@ -243,7 +287,8 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
                 <TableHead>Date</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="hidden sm:table-cell">Category</TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead className="hidden md:table-cell">Account</TableHead>
+                <TableHead className="hidden sm:table-cell">Scope</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
@@ -254,18 +299,21 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDate(t.date)}
                   </TableCell>
-                  <TableCell className="text-sm max-w-[140px] truncate">
+                  <TableCell className="text-sm max-w-[180px] truncate">
                     {t.description || "—"}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                     {t.category || "—"}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`text-xs capitalize ${TYPE_COLORS[t.type] ?? ""}`}>
-                      {t.type}
-                    </Badge>
+                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                    {t.account_id ? accountMap.get(t.account_id) ?? "—" : "—"}
                   </TableCell>
-                  <TableCell className="text-right font-medium text-sm whitespace-nowrap">
+                  <TableCell className="hidden sm:table-cell">
+                    <span className={`text-xs font-medium ${(t.scope ?? "personal") === "business" ? "text-blue-500" : "text-muted-foreground"}`}>
+                      {(t.scope ?? "personal") === "business" ? "BIZ" : "PER"}
+                    </span>
+                  </TableCell>
+                  <TableCell className={`text-right font-medium text-sm whitespace-nowrap ${t.type === "income" ? "text-green-600 dark:text-green-400" : ""}`}>
                     {t.type === "expense" ? "-" : "+"}{formatCurrency(Number(t.amount))}
                   </TableCell>
                   <TableCell>
@@ -335,9 +383,26 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Date</Label>
-              <Input type="date" {...form.register("date")} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <Input type="date" {...form.register("date")} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Scope</Label>
+                <Select
+                  value={form.watch("scope")}
+                  onValueChange={(v) => form.setValue("scope", v as "personal" | "business")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">Personal</SelectItem>
+                    <SelectItem value="business">Business</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-1.5">
