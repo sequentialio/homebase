@@ -121,14 +121,11 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     if (!text && attachments.length === 0 && csvAttachments.length === 0) return
     if (isStreaming) return
     const imgs = [...attachments]
-    // Append CSV contents to the message text
-    const csvBlock = csvAttachments.length > 0
-      ? "\n\n" + csvAttachments.map((c) => `**${c.name}:**\n\`\`\`csv\n${c.content}\n\`\`\``).join("\n\n")
-      : ""
+    const csvs = [...csvAttachments]
     setInput("")
     setAttachments([])
     setCsvAttachments([])
-    await sendMessage(text + csvBlock, imgs)
+    await sendMessage(text, imgs, csvs)
   }, [input, attachments, csvAttachments, isStreaming, sendMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -407,6 +404,16 @@ function MessageBubble({ message }: { message: Message }) {
             {message.imageCount} image{message.imageCount! > 1 ? "s" : ""} attached
           </div>
         )}
+        {message.csvFiles && message.csvFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {message.csvFiles.map((name, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-xs bg-muted/60 border border-border/50 rounded-md px-2 py-1">
+                <FileText className="size-3 shrink-0" />
+                <span>{name}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!isUser && (message.thinking || message.streamingThinking) && (
           <ThinkingBlock
@@ -627,6 +634,7 @@ function formatToolName(name: string): string {
     get_cleaning_duties: "Cleaning",
     get_calendar_events: "Calendar",
     log_transaction: "Logging transaction",
+    bulk_log_transactions: "Logging transactions",
     add_to_shopping_list: "Adding to list",
     add_calendar_event: "Adding event",
     upsert_investment: "Updating investment",

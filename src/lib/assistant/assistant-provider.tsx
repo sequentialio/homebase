@@ -30,6 +30,7 @@ export interface Message {
   content: string
   images?: ImageAttachment[]
   imageCount?: number
+  csvFiles?: string[]        // display-only: filenames attached
   toolCalls?: string[]
   thinking?: string
   streamingThinking?: boolean
@@ -42,6 +43,7 @@ export interface StoredMessage {
   content: string
   toolCalls?: string[]
   imageCount?: number
+  csvFiles?: string[]
 }
 
 export interface ChatSession {
@@ -59,6 +61,7 @@ export function storedToMessages(stored: StoredMessage[]): Message[] {
     content: m.content,
     toolCalls: m.toolCalls,
     imageCount: m.imageCount,
+    csvFiles: m.csvFiles,
     streaming: false,
   }))
 }
@@ -74,7 +77,7 @@ interface AssistantContextValue {
   setCurrentSessionId: Dispatch<SetStateAction<string | null>>
   isStreaming: boolean
   activeTools: string[]
-  sendMessage: (text: string, images: ImageAttachment[]) => Promise<void>
+  sendMessage: (text: string, images: ImageAttachment[], csvFiles?: { name: string; content: string }[]) => Promise<void>
   selectSession: (session: ChatSession) => void
   startNewChat: (focusCb?: () => void) => void
 }
@@ -139,6 +142,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         content: m.content,
         toolCalls: m.toolCalls?.length ? m.toolCalls : undefined,
         imageCount: (m.images?.length || m.imageCount) || undefined,
+        csvFiles: m.csvFiles?.length ? m.csvFiles : undefined,
       }))
 
     const sid = currentSessionIdRef.current
@@ -179,15 +183,21 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
 
   // ── Send message & stream ──────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (text: string, images: ImageAttachment[]) => {
-    if (!text && images.length === 0) return
+  const sendMessage = useCallback(async (text: string, images: ImageAttachment[], csvFiles?: { name: string; content: string }[]) => {
+    if (!text && images.length === 0 && !csvFiles?.length) return
     if (isStreaming) return
+
+    // CSV content is sent to the API but not stored in the displayed message
+    const csvBlock = csvFiles?.length
+      ? "\n\n" + csvFiles.map((c) => `[Attached file: ${c.name}]\n\`\`\`csv\n${c.content}\n\`\`\``).join("\n\n")
+      : ""
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: text,
+      content: text,   // display text only — no CSV dump
       images: images.length > 0 ? images : undefined,
+      csvFiles: csvFiles?.length ? csvFiles.map((c) => c.name) : undefined,
     }
     const assistantMsg: Message = {
       id: crypto.randomUUID(),
@@ -207,11 +217,11 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
     setIsStreaming(true)
     setActiveTools([])
 
-    // Build history snapshot before state update settles
+    // Build history for API — last user message gets CSV content appended
     const historySnapshot = [...messages, userMsg]
-    const history = historySnapshot.map((m) => ({
+    const history = historySnapshot.map((m, i) => ({
       role: m.role,
-      content: m.content,
+      content: i === historySnapshot.length - 1 ? m.content + csvBlock : m.content,
       images: m.images?.map((img) => ({ data: img.data, mediaType: img.mediaType })),
     }))
 

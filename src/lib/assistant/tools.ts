@@ -87,6 +87,32 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "bulk_log_transactions",
+    description:
+      "Log multiple transactions at once from a CSV export or list. Use this instead of log_transaction when the user attaches a CSV file or provides more than 2 transactions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        transactions: {
+          type: "array",
+          description: "Array of transactions to log",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["income", "expense"], description: "Transaction type" },
+              amount: { type: "number", description: "Positive amount in dollars" },
+              description: { type: "string", description: "Merchant or description" },
+              category: { type: "string", description: "Category (e.g. Groceries, Dining, Gas, Transfer, Entertainment)" },
+              date: { type: "string", description: "Date in YYYY-MM-DD format" },
+            },
+            required: ["type", "amount", "description"],
+          },
+        },
+      },
+      required: ["transactions"],
+    },
+  },
+  {
     name: "add_to_shopping_list",
     description:
       "Add one or more items to the household shopping list.",
@@ -259,6 +285,9 @@ export async function executeTool(
       case "log_transaction":
         return await logTransaction(supabase, userId, input)
 
+      case "bulk_log_transactions":
+        return await bulkLogTransactions(supabase, userId, input)
+
       case "add_to_shopping_list":
         return await addToShoppingList(supabase, input)
 
@@ -404,6 +433,30 @@ async function logTransaction(
 
   if (error) return `Failed to log transaction: ${error.message}`
   return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date})`
+}
+
+async function bulkLogTransactions(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  type TxInput = { type: string; amount: number; description: string; category?: string; date?: string }
+  const txs = input.transactions as TxInput[]
+  if (!txs?.length) return "No transactions provided."
+
+  const today = new Date().toISOString().split("T")[0]
+  const rows = txs.map((t) => ({
+    user_id: userId,
+    type: t.type,
+    amount: Number(t.amount),
+    description: t.description,
+    category: t.category ?? null,
+    date: t.date ?? today,
+  }))
+
+  const { error, data } = await supabase.from("transactions").insert(rows).select()
+  if (error) return `Failed to log transactions: ${error.message}`
+  return `Logged ${data.length} transaction${data.length !== 1 ? "s" : ""} successfully.`
 }
 
 async function addToShoppingList(
