@@ -395,9 +395,12 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
   // ── Persist positions ──────────────────────────────────────────────────────
 
   async function persistPositions(groupItems: GroceryItem[]) {
-    const updates = groupItems.map((item, i) => ({ id: item.id, position: i }))
-    const { error } = await supabase.from("grocery_items").upsert(updates as never)
-    if (error) toast.error("Failed to save order")
+    const results = await Promise.all(
+      groupItems.map((item, i) =>
+        supabase.from("grocery_items").update({ position: i }).eq("id", item.id)
+      )
+    )
+    if (results.some((r) => r.error)) toast.error("Failed to save order")
   }
 
   // ── DnD handlers ──────────────────────────────────────────────────────────

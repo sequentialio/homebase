@@ -395,9 +395,12 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
   }
 
   async function persistPositions(containerId: string, debts: Debt[]) {
-    const updates = debts.map((d, i) => ({ id: d.id, position: i, section_id: d.section_id }))
-    const { error } = await supabase.from("debts").upsert(updates as never)
-    if (error) toast.error("Failed to save order")
+    const results = await Promise.all(
+      debts.map((d, i) =>
+        supabase.from("debts").update({ position: i, section_id: d.section_id }).eq("id", d.id)
+      )
+    )
+    if (results.some((r) => r.error)) toast.error("Failed to save order")
   }
 
   async function handleDragEnd(event: DragEndEvent) {

@@ -117,8 +117,11 @@ async function persistPositions(
   table: "tax_sections" | "tax_items",
   items: { id: string }[]
 ) {
-  const updates = items.map((item, i) => ({ id: item.id, position: i + 1 }))
-  await supabase.from(table as never).upsert(updates as never)
+  await Promise.all(
+    items.map((item, i) =>
+      supabase.from(table as never).update({ position: i + 1 } as never).eq("id", item.id)
+    )
+  )
 }
 
 // ── Sortable Row ──────────────────────────────────────────────────────────────

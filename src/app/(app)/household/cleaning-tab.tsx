@@ -315,9 +315,12 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
   // ── Persist positions ──────────────────────────────────────────────────────
 
   async function persistPositions(groupDuties: CleaningDuty[]) {
-    const updates = groupDuties.map((d, i) => ({ id: d.id, position: i }))
-    const { error } = await supabase.from("cleaning_duties").upsert(updates as never)
-    if (error) toast.error("Failed to save order")
+    const results = await Promise.all(
+      groupDuties.map((d, i) =>
+        supabase.from("cleaning_duties").update({ position: i }).eq("id", d.id)
+      )
+    )
+    if (results.some((r) => r.error)) toast.error("Failed to save order")
   }
 
   // ── DnD handlers ──────────────────────────────────────────────────────────
