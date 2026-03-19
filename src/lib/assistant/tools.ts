@@ -141,6 +141,76 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "upsert_debt",
+    description:
+      "Add a new debt or update an existing one (balance, interest rate, min payment, payoff date). Use when the user shares a loan or credit card statement. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing debt ID to update (omit to create new)" },
+        name: { type: "string", description: "Debt name (e.g. 'SCFCU Personal Loan')" },
+        balance: { type: "number", description: "Current outstanding balance" },
+        interest_rate: { type: "number", description: "Annual interest rate as a percentage (e.g. 6.5)" },
+        min_payment: { type: "number", description: "Minimum monthly payment" },
+        payoff_date: { type: "string", description: "Estimated payoff date (YYYY-MM-DD)" },
+        notes: { type: "string", description: "Any additional notes" },
+      },
+      required: ["name", "balance"],
+    },
+  },
+  {
+    name: "upsert_account",
+    description:
+      "Add a new bank account or update an existing one's balance. Use when the user shares account info or a bank statement. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing account ID to update (omit to create new)" },
+        name: { type: "string", description: "Account name (e.g. 'SCFCU Checking')" },
+        balance: { type: "number", description: "Current balance in dollars" },
+        currency: { type: "string", description: "Currency code (default: USD)" },
+      },
+      required: ["name", "balance"],
+    },
+  },
+  {
+    name: "upsert_income_source",
+    description:
+      "Add a new income source or update an existing one. Use when the user mentions salary, freelance income, or any recurring income. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing income source ID to update (omit to create new)" },
+        name: { type: "string", description: "Source name (e.g. 'Salary', 'Freelance')" },
+        amount: { type: "number", description: "Amount per pay period" },
+        frequency: {
+          type: "string",
+          enum: ["weekly", "biweekly", "monthly", "annually", "one-time"],
+          description: "How often this income is received",
+        },
+        next_date: { type: "string", description: "Next expected payment date (YYYY-MM-DD)" },
+        active: { type: "boolean", description: "Whether this income source is still active (default true)" },
+      },
+      required: ["name", "amount", "frequency"],
+    },
+  },
+  {
+    name: "upsert_budget",
+    description:
+      "Add or update a monthly budget for a category. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing budget ID to update (omit to create new)" },
+        category: { type: "string", description: "Budget category (e.g. Groceries, Dining, Transport)" },
+        monthly_limit: { type: "number", description: "Monthly spending limit in dollars" },
+        month: { type: "number", description: "Month number 1-12 (default: current month)" },
+        year: { type: "number", description: "Year (default: current year)" },
+      },
+      required: ["category", "monthly_limit"],
+    },
+  },
+  {
     name: "add_calendar_event",
     description:
       "Add a new event to the Mita calendar.",
@@ -194,6 +264,18 @@ export async function executeTool(
 
       case "upsert_investment":
         return await upsertInvestment(supabase, userId, input)
+
+      case "upsert_debt":
+        return await upsertDebt(supabase, input)
+
+      case "upsert_account":
+        return await upsertAccount(supabase, userId, input)
+
+      case "upsert_income_source":
+        return await upsertIncomeSource(supabase, userId, input)
+
+      case "upsert_budget":
+        return await upsertBudget(supabase, input)
 
       case "add_calendar_event":
         return await addCalendarEvent(supabase, userId, input)
@@ -386,6 +468,102 @@ async function upsertInvestment(
       .single()
     if (error) return `Failed to add investment: ${error.message}`
     return `Investment added: "${data.name}" (${data.account_type}) — balance $${data.balance}${data.as_of_date ? ` as of ${data.as_of_date}` : ""}`
+  }
+}
+
+async function upsertDebt(
+  supabase: SupabaseClient<Database>,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const payload = {
+    name: input.name as string,
+    balance: Number(input.balance),
+    interest_rate: input.interest_rate != null ? Number(input.interest_rate) : null,
+    min_payment: input.min_payment != null ? Number(input.min_payment) : null,
+    payoff_date: (input.payoff_date as string) ?? null,
+    notes: (input.notes as string) ?? null,
+  }
+  if (id) {
+    const { error, data } = await supabase.from("debts").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update debt: ${error.message}`
+    return `Debt updated: "${data.name}" — balance $${data.balance}${data.min_payment ? `, min payment $${data.min_payment}` : ""}`
+  } else {
+    const { error, data } = await supabase.from("debts").insert(payload).select().single()
+    if (error) return `Failed to add debt: ${error.message}`
+    return `Debt added: "${data.name}" — balance $${data.balance}`
+  }
+}
+
+async function upsertAccount(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    balance: Number(input.balance),
+    currency: (input.currency as string) ?? "USD",
+    last_updated: new Date().toISOString().split("T")[0],
+  }
+  if (id) {
+    const { error, data } = await supabase.from("bank_accounts").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update account: ${error.message}`
+    return `Account updated: "${data.name}" — balance $${data.balance}`
+  } else {
+    const { error, data } = await supabase.from("bank_accounts").insert(payload).select().single()
+    if (error) return `Failed to add account: ${error.message}`
+    return `Account added: "${data.name}" — balance $${data.balance}`
+  }
+}
+
+async function upsertIncomeSource(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    amount: Number(input.amount),
+    frequency: input.frequency as string,
+    next_date: (input.next_date as string) ?? null,
+    active: (input.active as boolean) ?? true,
+  }
+  if (id) {
+    const { error, data } = await supabase.from("income_sources").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update income source: ${error.message}`
+    return `Income source updated: "${data.name}" — $${data.amount} ${data.frequency}`
+  } else {
+    const { error, data } = await supabase.from("income_sources").insert(payload).select().single()
+    if (error) return `Failed to add income source: ${error.message}`
+    return `Income source added: "${data.name}" — $${data.amount} ${data.frequency}`
+  }
+}
+
+async function upsertBudget(
+  supabase: SupabaseClient<Database>,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const now = new Date()
+  const payload = {
+    category: input.category as string,
+    monthly_limit: Number(input.monthly_limit),
+    month: input.month != null ? Number(input.month) : now.getMonth() + 1,
+    year: input.year != null ? Number(input.year) : now.getFullYear(),
+  }
+  if (id) {
+    const { error, data } = await supabase.from("budgets").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update budget: ${error.message}`
+    return `Budget updated: ${data.category} — $${data.monthly_limit}/mo`
+  } else {
+    const { error, data } = await supabase.from("budgets").insert(payload).select().single()
+    if (error) return `Failed to add budget: ${error.message}`
+    return `Budget added: ${data.category} — $${data.monthly_limit}/mo for ${data.month}/${data.year}`
   }
 }
 
