@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/format-utils"
 import { ALL_CATEGORIES, TRANSACTION_TYPES } from "./constants"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown } from "lucide-react"
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +19,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -38,6 +43,30 @@ import type { Tables } from "@/types/database"
 
 type Transaction = Tables<"transactions"> & { scope?: string }
 type BankAccount = Tables<"bank_accounts">
+
+// ── Summary tile config ────────────────────────────────────────────────────
+
+interface TileConfig {
+  label: string
+  type: "income" | "expense"
+  scope: "all" | "personal" | "business"
+  accountId: "all" | string
+  category: "all" | string
+}
+
+const DEFAULT_TILES: TileConfig[] = [
+  { label: "Income", type: "income", scope: "all", accountId: "all", category: "all" },
+  { label: "Expenses", type: "expense", scope: "all", accountId: "all", category: "all" },
+]
+
+function loadTiles(): TileConfig[] {
+  if (typeof window === "undefined") return DEFAULT_TILES
+  try {
+    const saved = localStorage.getItem("tx_tile_config")
+    if (saved) return JSON.parse(saved) as TileConfig[]
+  } catch { /* ignore */ }
+  return DEFAULT_TILES
+}
 
 const schema = z.object({
   amount: z.number().positive("Amount must be greater than 0"),
@@ -86,17 +115,40 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     })
   }, [transactions, filterMonth, filterYear, filterScope, filterAccount])
 
-  const totals = useMemo(() => {
-    return filtered.reduce(
-      (acc, t) => {
-        const amt = Number(t.amount) || 0
-        if (t.type === "income") acc.income += amt
-        else if (t.type === "expense") acc.expense += amt
-        return acc
-      },
-      { income: 0, expense: 0 }
-    )
-  }, [filtered])
+  const [tiles, setTiles] = useState<TileConfig[]>(loadTiles)
+
+  function saveTiles(next: TileConfig[]) {
+    setTiles(next)
+    localStorage.setItem("tx_tile_config", JSON.stringify(next))
+  }
+
+  function updateTile(index: number, patch: Partial<TileConfig>) {
+    const next = tiles.map((t, i) => (i === index ? { ...t, ...patch } : t))
+    saveTiles(next)
+  }
+
+  // Time-filtered base (month + year only) — tiles apply their own scope/account/category
+  const timeFiltered = useMemo(() => {
+    return transactions.filter((t) => {
+      if (!t.date) return false
+      const [y, m] = t.date.split("-").map(Number)
+      if (filterYear !== "all" && y !== filterYear) return false
+      if (filterMonth !== "all" && m !== (filterMonth as number) + 1) return false
+      return true
+    })
+  }, [transactions, filterMonth, filterYear])
+
+  function calcTile(cfg: TileConfig): number {
+    return timeFiltered
+      .filter((t) => {
+        if (t.type !== cfg.type) return false
+        if (cfg.scope !== "all" && (t.scope ?? "personal") !== cfg.scope) return false
+        if (cfg.accountId !== "all" && t.account_id !== cfg.accountId) return false
+        if (cfg.category !== "all" && t.category !== cfg.category) return false
+        return true
+      })
+      .reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -205,22 +257,125 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
 
   return (
     <div className="space-y-4">
-      {/* Summary row */}
+      {/* Summary tiles */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg border p-3 flex items-center gap-3">
-          <TrendingUp className="size-4 text-green-500 shrink-0" />
-          <div>
-            <p className="text-xs text-muted-foreground">Income</p>
-            <p className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(totals.income)}</p>
-          </div>
-        </div>
-        <div className="rounded-lg border p-3 flex items-center gap-3">
-          <TrendingDown className="size-4 text-red-500 shrink-0" />
-          <div>
-            <p className="text-xs text-muted-foreground">Expenses</p>
-            <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(totals.expense)}</p>
-          </div>
-        </div>
+        {tiles.map((tile, idx) => {
+          const value = calcTile(tile)
+          const isIncome = tile.type === "income"
+          const Icon = isIncome ? TrendingUp : TrendingDown
+          const hasFilter = tile.scope !== "all" || tile.accountId !== "all" || tile.category !== "all"
+          const subtitleParts = [
+            tile.scope !== "all" ? (tile.scope === "personal" ? "Personal" : "Business") : null,
+            tile.accountId !== "all" ? (accountMap.get(tile.accountId) ?? "Account") : null,
+            tile.category !== "all" ? tile.category : null,
+          ].filter(Boolean)
+
+          return (
+            <div key={idx} className="rounded-lg border p-3 flex items-center gap-3 relative group">
+              <Icon className={`size-4 shrink-0 ${isIncome ? "text-green-500" : "text-red-500"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground truncate">{tile.label}</p>
+                <p className={`font-semibold ${isIncome ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                  {formatCurrency(value)}
+                </p>
+                {hasFilter && (
+                  <p className="text-[10px] text-muted-foreground/60 truncate leading-tight mt-0.5">
+                    {subtitleParts.join(" · ")}
+                  </p>
+                )}
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="!size-6 !min-h-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  >
+                    <Settings2 className="size-3" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3 space-y-3" align="end">
+                  <p className="text-xs font-medium">Configure tile</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Label</Label>
+                    <Input
+                      className="h-7 text-xs"
+                      value={tile.label}
+                      onChange={(e) => updateTile(idx, { label: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Type</Label>
+                    <Select
+                      value={tile.type}
+                      onValueChange={(v) => updateTile(idx, { type: v as TileConfig["type"] })}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="income">Income</SelectItem>
+                        <SelectItem value="expense">Expense</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Scope</Label>
+                    <Select
+                      value={tile.scope}
+                      onValueChange={(v) => updateTile(idx, { scope: v as TileConfig["scope"] })}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All scopes</SelectItem>
+                        <SelectItem value="personal">Personal</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {accounts.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Account</Label>
+                      <Select
+                        value={tile.accountId}
+                        onValueChange={(v) => updateTile(idx, { accountId: v })}
+                      >
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All accounts</SelectItem>
+                          {accounts.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Category</Label>
+                    <Select
+                      value={tile.category}
+                      onValueChange={(v) => updateTile(idx, { category: v })}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All categories</SelectItem>
+                        {ALL_CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )
+        })}
       </div>
 
       {/* Toolbar */}
