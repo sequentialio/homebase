@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.plaid.com",
               "style-src 'self' 'unsafe-inline'",
               // Add your CDN/storage domains to img-src as needed
               "img-src 'self' data: blob: https://*.supabase.co",
