@@ -239,6 +239,8 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
     }))
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+    let pendingText = ""
+    let rafHandle: number | null = null
 
     try {
       const res = await fetch("/api/assistant/chat", {
@@ -311,13 +313,22 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
                 return updated
               })
             } else if (event.type === "delta") {
-              setMessages((prev) => {
-                const updated = prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, content: m.content + event.text } : m
-                )
-                finalMessages = updated
-                return updated
-              })
+              // Batch text deltas via rAF to reduce re-renders
+              pendingText += event.text
+              if (!rafHandle) {
+                rafHandle = requestAnimationFrame(() => {
+                  const chunk = pendingText
+                  pendingText = ""
+                  rafHandle = null
+                  setMessages((prev) => {
+                    const updated = prev.map((m) =>
+                      m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m
+                    )
+                    finalMessages = updated
+                    return updated
+                  })
+                })
+              }
             } else if (event.type === "tool_start") {
               setActiveTools((prev) => [...prev, event.name])
             } else if (event.type === "tool_done") {
@@ -332,6 +343,18 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
                 return updated
               })
             } else if (event.type === "done") {
+              // Flush any pending text delta before marking done
+              if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null }
+              if (pendingText) {
+                const chunk = pendingText; pendingText = ""
+                setMessages((prev) => {
+                  const updated = prev.map((m) =>
+                    m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m
+                  )
+                  finalMessages = updated
+                  return updated
+                })
+              }
               setMessages((prev) => {
                 const updated = prev.map((m) =>
                   m.id === assistantMsg.id ? { ...m, streaming: false } : m
@@ -360,6 +383,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         return updated
       })
     } finally {
+      if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null }
       try { reader?.cancel() } catch { /* ignore */ }
       setIsStreaming(false)
       setActiveTools([])
