@@ -111,14 +111,17 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     },
   })
 
+  // Sentinel for "no selection" in Radix Select (empty string is not allowed as SelectItem value)
+  const NO_VALUE = "__none__"
+
   function openAdd() {
     form.reset({
       amount: 0,
       type: "expense",
-      category: "",
+      category: NO_VALUE,
       description: "",
       date: new Date().toISOString().split("T")[0],
-      account_id: "",
+      account_id: NO_VALUE,
       scope: "personal",
     })
     setEditing(null)
@@ -129,10 +132,10 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     form.reset({
       amount: Number(t.amount),
       type: t.type as FormValues["type"],
-      category: t.category ?? "",
+      category: t.category || NO_VALUE,
       description: t.description ?? "",
       date: t.date,
-      account_id: t.account_id ?? "",
+      account_id: t.account_id || NO_VALUE,
       scope: (t.scope as "personal" | "business") ?? "personal",
     })
     setEditing(t)
@@ -144,10 +147,10 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       user_id: userId,
       amount: values.amount,
       type: values.type,
-      category: values.category || null,
+      category: (values.category && values.category !== NO_VALUE) ? values.category : null,
       description: values.description || null,
       date: values.date,
-      account_id: values.account_id || null,
+      account_id: (values.account_id && values.account_id !== NO_VALUE) ? values.account_id : null,
       scope: values.scope,
     }
 
@@ -408,13 +411,14 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
             <div className="space-y-1.5">
               <Label>Category</Label>
               <Select
-                value={form.watch("category") ?? ""}
+                value={form.watch("category") || NO_VALUE}
                 onValueChange={(v) => form.setValue("category", v)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={NO_VALUE}>No category</SelectItem>
                   {ALL_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
@@ -431,14 +435,14 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
               <div className="space-y-1.5">
                 <Label>Account</Label>
                 <Select
-                  value={form.watch("account_id") ?? ""}
+                  value={form.watch("account_id") || NO_VALUE}
                   onValueChange={(v) => form.setValue("account_id", v)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select account (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value={NO_VALUE}>None</SelectItem>
                     {accounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                     ))}
