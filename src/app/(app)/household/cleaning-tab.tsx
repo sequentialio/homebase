@@ -62,7 +62,7 @@ const FREQUENCY_DAYS: Record<Frequency, number> = {
   monthly: 30,
 }
 
-const ROOM_OPTIONS = [
+const ROOM_SUGGESTIONS = [
   "Kitchen",
   "Bathroom",
   "Bedroom",
@@ -73,6 +73,7 @@ const ROOM_OPTIONS = [
 ] as const
 
 const DEFAULT_ROOM = "General"
+type RoomSuggestion = (typeof ROOM_SUGGESTIONS)[number]
 
 function calcNextDue(lastCompleted: string, frequency: Frequency): string {
   const d = new Date(lastCompleted)
@@ -255,6 +256,12 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
     [profiles]
   )
 
+  // All unique rooms across existing duties + suggestions for datalist
+  const allRoomOptions = useMemo(() => {
+    const fromDuties = duties.map((d) => d.room).filter(Boolean) as string[]
+    return Array.from(new Set([...ROOM_SUGGESTIONS, ...fromDuties])).sort()
+  }, [duties])
+
   // Build room groups from data
   const groups = useMemo(() => {
     const map = new Map<string, CleaningDuty[]>()
@@ -273,15 +280,15 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
       )
     }
 
-    // Order groups by ROOM_OPTIONS order, then any extras alphabetically
+    // Order groups: known suggestions first (in order), then any custom rooms alphabetically
     const ordered: [string, CleaningDuty[]][] = []
-    for (const room of ROOM_OPTIONS) {
+    for (const room of ROOM_SUGGESTIONS) {
       if (map.has(room)) {
         ordered.push([room, map.get(room)!])
       }
     }
     for (const [key, value] of map) {
-      if (!ROOM_OPTIONS.includes(key as (typeof ROOM_OPTIONS)[number])) {
+      if (!ROOM_SUGGESTIONS.includes(key as RoomSuggestion)) {
         ordered.push([key, value])
       }
     }
@@ -428,15 +435,16 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
   }
 
   async function onSubmit(values: FormValues) {
-    const payload = {
-      name: values.name,
-      frequency: values.frequency,
-      assigned_to: values.assigned_to || null,
-      notes: values.notes || null,
-      room: values.room === DEFAULT_ROOM ? null : (values.room ?? null),
-    }
+    const room = values.room === DEFAULT_ROOM ? null : (values.room || null)
 
     if (editing) {
+      const payload = {
+        name: values.name,
+        frequency: values.frequency,
+        assigned_to: values.assigned_to || null,
+        notes: values.notes || null,
+        room,
+      }
       const { data, error } = await supabase
         .from("cleaning_duties")
         .update(payload as never)
@@ -450,6 +458,16 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
       setDuties((prev) => prev.map((d) => (d.id === editing.id ? data : d)))
       toast.success("Duty updated")
     } else {
+      // Set next_due from today so it appears on the calendar immediately
+      const nextDue = calcNextDue(new Date().toISOString(), values.frequency)
+      const payload = {
+        name: values.name,
+        frequency: values.frequency,
+        assigned_to: values.assigned_to || null,
+        notes: values.notes || null,
+        room,
+        next_due: nextDue,
+      }
       const { data, error } = await supabase
         .from("cleaning_duties")
         .insert(payload as never)
@@ -460,7 +478,7 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
         return
       }
       setDuties((prev) => [...prev, data])
-      toast.success("Duty added")
+      toast.success(`Duty added — first due ${nextDue}`)
     }
     setOpen(false)
   }
@@ -649,21 +667,16 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
 
               <div className="space-y-1.5">
                 <Label>Room</Label>
-                <Select
-                  value={form.watch("room") ?? DEFAULT_ROOM}
-                  onValueChange={(v) => form.setValue("room", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROOM_OPTIONS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  placeholder="e.g. Kitchen"
+                  list="room-options"
+                  {...form.register("room")}
+                />
+                <datalist id="room-options">
+                  {allRoomOptions.map((r) => (
+                    <option key={r} value={r} />
+                  ))}
+                </datalist>
               </div>
             </div>
 

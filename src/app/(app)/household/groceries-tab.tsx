@@ -63,7 +63,7 @@ type GroceryItem = Tables<"grocery_items"> & {
   checked?: boolean | null
 }
 
-const GROCERY_CATEGORIES = [
+const GROCERY_CATEGORY_SUGGESTIONS = [
   "Produce",
   "Meat & Seafood",
   "Dairy & Eggs",
@@ -295,6 +295,12 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
     () => items.filter((i) => (view === "shopping" ? !i.in_pantry : i.in_pantry)),
     [items, view]
   )
+
+  // All unique categories across all items + suggestions for datalist
+  const allCategoryOptions = useMemo(() => {
+    const fromItems = items.map((i) => i.category).filter(Boolean) as string[]
+    return Array.from(new Set([...GROCERY_CATEGORY_SUGGESTIONS, ...fromItems])).sort()
+  }, [items])
 
   // Keep a ref so DnD callbacks never go stale
   const itemsRef = useRef<GroceryItem[]>(viewItems)
@@ -829,21 +835,16 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
 
             <div className="space-y-1.5">
               <Label>Category</Label>
-              <Select
-                value={form.watch("category") ?? ""}
-                onValueChange={(v) => form.setValue("category", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {GROCERY_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                placeholder="e.g. Produce"
+                list="grocery-category-options"
+                {...form.register("category")}
+              />
+              <datalist id="grocery-category-options">
+                {allCategoryOptions.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
