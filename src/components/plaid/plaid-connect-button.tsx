@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { usePlaidLink } from "react-plaid-link"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { Landmark, Loader2 } from "lucide-react"
@@ -10,50 +11,34 @@ interface PlaidConnectButtonProps {
   onSuccess?: () => void
 }
 
-// Mounted only when a real token exists — usePlaidLink always gets a valid token
-function PlaidLinkOpener({
-  token,
-  onSuccess,
-  onExit,
-}: {
-  token: string
-  onSuccess: (public_token: string, metadata: { institution: { name: string; institution_id: string } | null }) => void
-  onExit: () => void
-}) {
-  const { open, ready } = usePlaidLink({ token, onSuccess, onExit })
-
-  useEffect(() => {
-    if (ready) open()
-  }, [ready, open])
-
-  return null
-}
-
 export function PlaidConnectButton({ onSuccess }: PlaidConnectButtonProps) {
+  const supabase = useMemo(() => createClient(), [])
   const [linkToken, setLinkToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [exchanging, setExchanging] = useState(false)
 
-  const handleClick = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/plaid/create-link-token", { method: "POST" })
-      const data = await res.json()
-      if (data.link_token) {
-        setLinkToken(data.link_token)
-      } else {
-        toast.error("Failed to initialize bank connection")
-        setLoading(false)
+  // Fetch link token eagerly on mount so Plaid SDK is ready before the user clicks
+  useEffect(() => {
+    let cancelled = false
+    async function fetchToken() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const res = await fetch("/api/plaid/create-link-token", { method: "POST" })
+        const data = await res.json()
+        if (!cancelled && data.link_token) setLinkToken(data.link_token)
+      } catch {
+        // Silent — button will stay disabled until token is ready
       }
-    } catch {
-      toast.error("Failed to initialize bank connection")
-      setLoading(false)
     }
-  }, [])
+    fetchToken()
+    return () => { cancelled = true }
+  }, [supabase])
 
-  const handleSuccess = useCallback(async (
+  const handlePlaidSuccess = useCallback(async (
     public_token: string,
-    metadata: { institution: { name: string; institution_id: string } | null }
+    metadata: { institution: { name: string; institution_id: string } | null },
   ) => {
+    setExchanging(true)
     try {
       const res = await fetch("/api/plaid/exchange-token", {
         method: "POST",
@@ -62,7 +47,9 @@ export function PlaidConnectButton({ onSuccess }: PlaidConnectButtonProps) {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success(`Connected ${data.institution_name} — ${data.accounts_connected} account${data.accounts_connected !== 1 ? "s" : ""}`)
+        toast.success(
+          `Connected ${data.institution_name} — ${data.accounts_connected} account${data.accounts_connected !== 1 ? "s" : ""}`
+        )
         onSuccess?.()
       } else {
         toast.error("Failed to connect bank")
@@ -70,29 +57,40 @@ export function PlaidConnectButton({ onSuccess }: PlaidConnectButtonProps) {
     } catch {
       toast.error("Failed to connect bank")
     } finally {
+      setExchanging(false)
       setLinkToken(null)
-      setLoading(false)
     }
   }, [onSuccess])
 
-  const handleExit = useCallback(() => {
+  const handlePlaidExit = useCallback(() => {
+    // User closed Plaid Link — re-fetch a fresh token for next attempt
     setLinkToken(null)
-    setLoading(false)
+    fetch("/api/plaid/create-link-token", { method: "POST" })
+      .then((r) => r.json())
+      .then((data) => { if (data.link_token) setLinkToken(data.link_token) })
+      .catch(() => {})
   }, [])
 
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: handlePlaidSuccess,
+    onExit: handlePlaidExit,
+  })
+
+  // open() is called directly from the click handler — preserves user gesture
   return (
-    <>
-      {linkToken && (
-        <PlaidLinkOpener
-          token={linkToken}
-          onSuccess={handleSuccess}
-          onExit={handleExit}
-        />
+    <Button
+      onClick={() => open()}
+      disabled={!ready || exchanging}
+      variant="outline"
+      className="gap-2"
+    >
+      {exchanging ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Landmark className="size-4" />
       )}
-      <Button onClick={handleClick} disabled={loading} variant="outline" className="gap-2">
-        {loading ? <Loader2 className="size-4 animate-spin" /> : <Landmark className="size-4" />}
-        Connect Bank Account
-      </Button>
-    </>
+      {exchanging ? "Connecting..." : "Connect Bank Account"}
+    </Button>
   )
 }
