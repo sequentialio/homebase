@@ -95,6 +95,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unsupported image type" }, { status: 400 })
   }
 
+  // Validate image size (~1.37x base64 overhead, reject >10MB)
+  const estimatedBytes = Math.ceil(image.length * 3 / 4)
+  if (estimatedBytes > 10 * 1024 * 1024) {
+    return NextResponse.json({ error: "Image too large (max 10MB)" }, { status: 413 })
+  }
+
   // 3. Call Claude Vision
   try {
     const anthropic = new Anthropic()
@@ -138,16 +144,16 @@ export async function POST(request: Request) {
       parsed = JSON.parse(raw)
     } catch {
       return NextResponse.json(
-        { error: "Failed to parse AI response", raw: textBlock.text },
+        { error: "Failed to parse AI response" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, user_id: user.id, data: parsed })
   } catch (err) {
-    console.error("Claude API error:", err)
+    console.error("[assistant/analyze] Error:", err instanceof Error ? err.message : err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "AI analysis failed" },
+      { error: "AI analysis failed" },
       { status: 500 }
     )
   }

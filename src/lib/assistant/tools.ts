@@ -260,6 +260,25 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
 ]
 
+// ── Validation helpers ────────────────────────────────────────────────────────
+
+const MAX_AMOUNT = 10_000_000
+const MAX_BULK_TRANSACTIONS = 200
+const MAX_SHOPPING_ITEMS = 50
+const MAX_STRING_LENGTH = 500
+
+function validateAmount(amount: unknown): string | null {
+  const n = Number(amount)
+  if (!Number.isFinite(n) || n < 0 || n > MAX_AMOUNT) return `Invalid amount (must be 0–${MAX_AMOUNT})`
+  return null
+}
+
+function validateString(value: unknown, label: string, maxLen = MAX_STRING_LENGTH): string | null {
+  if (typeof value !== "string" || value.length === 0) return `${label} is required`
+  if (value.length > maxLen) return `${label} too long (max ${maxLen} chars)`
+  return null
+}
+
 // ── Tool executor ─────────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -417,6 +436,12 @@ async function logTransaction(
   userId: string,
   input: Record<string, unknown>
 ): Promise<string> {
+  const amtErr = validateAmount(input.amount)
+  if (amtErr) return amtErr
+  const descErr = validateString(input.description, "Description")
+  if (descErr) return descErr
+  if (input.type !== "income" && input.type !== "expense") return `Invalid type — must be "income" or "expense".`
+
   const { error, data } = await supabase
     .from("transactions")
     .insert({
@@ -443,6 +468,15 @@ async function bulkLogTransactions(
   type TxInput = { type: string; amount: number; description: string; category?: string; date?: string }
   const txs = input.transactions as TxInput[]
   if (!txs?.length) return "No transactions provided."
+  if (txs.length > MAX_BULK_TRANSACTIONS) return `Too many transactions (max ${MAX_BULK_TRANSACTIONS}).`
+
+  for (const t of txs) {
+    const amtErr = validateAmount(t.amount)
+    if (amtErr) return `Transaction "${t.description}": ${amtErr}`
+    const descErr = validateString(t.description, "Description")
+    if (descErr) return descErr
+    if (t.type !== "income" && t.type !== "expense") return `Invalid type "${t.type}" — must be "income" or "expense".`
+  }
 
   const today = new Date().toISOString().split("T")[0]
   const rows = txs.map((t) => ({
@@ -465,6 +499,12 @@ async function addToShoppingList(
 ): Promise<string> {
   type ItemInput = { name: string; quantity?: number; unit?: string; category?: string }
   const items = input.items as ItemInput[]
+  if (!items?.length) return "No items provided."
+  if (items.length > MAX_SHOPPING_ITEMS) return `Too many items (max ${MAX_SHOPPING_ITEMS}).`
+  for (const item of items) {
+    const nameErr = validateString(item.name, "Item name", 200)
+    if (nameErr) return nameErr
+  }
 
   const rows = items.map((item) => ({
     name: item.name,

@@ -187,7 +187,8 @@ export async function POST(request: Request) {
 
         send({ type: "done" })
       } catch (err) {
-        send({ type: "error", message: err instanceof Error ? err.message : "Stream error" })
+        console.error("[assistant/chat] Stream error:", err instanceof Error ? err.message : err)
+        send({ type: "error", message: "Something went wrong. Please try again." })
       } finally {
         controller.close()
       }
