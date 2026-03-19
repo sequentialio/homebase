@@ -201,8 +201,21 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
     if (isStreaming) return
 
     // CSV content is sent to the API but not stored in the displayed message
+    // Cap at 100 data rows per file to avoid blowing the context window
+    const MAX_CSV_ROWS = 100
     const csvBlock = csvFiles?.length
-      ? "\n\n" + csvFiles.map((c) => `[Attached file: ${c.name}]\n\`\`\`csv\n${c.content}\n\`\`\``).join("\n\n")
+      ? "\n\n" + csvFiles.map((c) => {
+          const lines = c.content.split("\n")
+          const header = lines[0]
+          const dataLines = lines.slice(1).filter((l) => l.trim())
+          const truncated = dataLines.length > MAX_CSV_ROWS
+          const kept = truncated ? dataLines.slice(0, MAX_CSV_ROWS) : dataLines
+          const csv = [header, ...kept].join("\n")
+          const note = truncated
+            ? `\n[NOTE: CSV truncated to first ${MAX_CSV_ROWS} of ${dataLines.length} rows. Ask the user to upload in batches.]`
+            : ""
+          return `[Attached file: ${c.name} (${dataLines.length} rows)]\n\`\`\`csv\n${csv}\n\`\`\`${note}`
+        }).join("\n\n")
       : ""
 
     const userMsg: Message = {
@@ -333,10 +346,13 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
               setActiveTools((prev) => [...prev, event.name])
             } else if (event.type === "tool_done") {
               setActiveTools((prev) => prev.filter((n) => n !== event.name))
+              if (event.error) {
+                toast.error(`Tool "${event.name}" failed: ${event.error}`)
+              }
               setMessages((prev) => {
                 const updated = prev.map((m) =>
                   m.id === assistantMsg.id
-                    ? { ...m, toolCalls: [...(m.toolCalls ?? []), event.name] }
+                    ? { ...m, toolCalls: [...(m.toolCalls ?? []), event.error ? `❌ ${event.name}` : event.name] }
                     : m
                 )
                 finalMessages = updated
@@ -371,12 +387,24 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         }
       }
     } catch (err) {
+      // Flush any pending text accumulated before the error
+      if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null }
+      if (pendingText) {
+        const chunk = pendingText; pendingText = ""
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m
+          )
+          finalMessages = updated
+          return updated
+        })
+      }
       const msg = err instanceof Error ? err.message : "Something went wrong"
       toast.error(msg)
       setMessages((prev) => {
         const updated = prev.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: "Sorry, something went wrong. Please try again.", streaming: false }
+            ? { ...m, content: m.content || "Sorry, something went wrong. Please try again.", streaming: false }
             : m
         )
         finalMessages = updated
