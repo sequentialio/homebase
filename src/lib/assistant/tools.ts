@@ -87,6 +87,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
           enum: ["personal", "business"],
           description: "Whether this is a personal or business transaction (default: personal)",
         },
+        account_id: {
+          type: "string",
+          description: "UUID of the bank account to associate. Look up the account_id from the '## Bank Accounts' section in your context. Always set this when the user mentions a specific account.",
+        },
       },
       required: ["type", "amount", "description"],
     },
@@ -110,6 +114,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
               category: { type: "string", description: "Category (e.g. Groceries, Dining, Gas, Transfer, Entertainment)" },
               date: { type: "string", description: "Date in YYYY-MM-DD format" },
               scope: { type: "string", enum: ["personal", "business"], description: "personal or business (default: personal)" },
+              account_id: { type: "string", description: "UUID of the bank account. Look up from '## Bank Accounts' in context. Always set when user mentions a specific account." },
             },
             required: ["type", "amount", "description"],
           },
@@ -142,6 +147,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
           type: "string",
           enum: ["personal", "business"],
           description: "Tag all imported transactions as personal or business (default: personal)",
+        },
+        account_id: {
+          type: "string",
+          description: "UUID of the bank account to associate with all imported transactions. Look up from '## Bank Accounts' in context.",
         },
       },
     },
@@ -528,15 +537,16 @@ async function logTransaction(
       amount: Number(input.amount),
       description: input.description as string,
       category: (input.category as string) ?? null,
-      date:
-        (input.date as string) ?? new Date().toISOString().split("T")[0],
+      date: (input.date as string) ?? new Date().toISOString().split("T")[0],
       scope,
+      account_id: (input.account_id as string) ?? null,
     } as never)
     .select()
     .single()
 
   if (error) return `Failed to log transaction: ${error.message}`
-  return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date}) [${scope}]`
+  const acctNote = input.account_id ? ` [account: ${input.account_id}]` : ""
+  return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date}) [${scope}]${acctNote}`
 }
 
 async function bulkLogTransactions(
@@ -544,7 +554,7 @@ async function bulkLogTransactions(
   userId: string,
   input: Record<string, unknown>
 ): Promise<string> {
-  type TxInput = { type: string; amount: number; description: string; category?: string; date?: string }
+  type TxInput = { type: string; amount: number; description: string; category?: string; date?: string; scope?: string; account_id?: string }
   const txs = input.transactions as TxInput[]
   if (!txs?.length) return "No transactions provided."
   if (txs.length > MAX_BULK_TRANSACTIONS) return `Too many transactions (max ${MAX_BULK_TRANSACTIONS}).`
@@ -565,7 +575,8 @@ async function bulkLogTransactions(
     description: t.description,
     category: t.category ?? null,
     date: t.date ?? today,
-    scope: (t as Record<string, unknown>).scope ?? "personal",
+    scope: t.scope ?? "personal",
+    account_id: t.account_id ?? null,
   }))
 
   const { error, data } = await supabase.from("transactions").insert(rows as never).select()
@@ -788,6 +799,7 @@ async function importCsvTransactions(
   const startDate = input.start_date as string | undefined
   const endDate = input.end_date as string | undefined
   const scope = (input.scope as string) ?? "personal"
+  const accountId = (input.account_id as string) ?? null
 
   // Parse CSV
   const lines = csvContent.split("\n").filter((l) => l.trim())
@@ -812,7 +824,7 @@ async function importCsvTransactions(
     return null
   }
 
-  const rows: { user_id: string; type: string; amount: number; description: string; category: string | null; date: string; scope: string }[] = []
+  const rows: { user_id: string; type: string; amount: number; description: string; category: string | null; date: string; scope: string; account_id: string | null }[] = []
   let skippedTransfers = 0
   let skippedDateFilter = 0
   let parseErrors = 0
@@ -849,6 +861,7 @@ async function importCsvTransactions(
       category: category || null,
       date,
       scope,
+      account_id: accountId,
     })
   }
 
