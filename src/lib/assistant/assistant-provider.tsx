@@ -432,7 +432,13 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
       abortRef.current = null
       setIsStreaming(false)
       setActiveTools([])
-      await saveSession(finalMessages)
+      // Force streaming: false on the assistant message before saving —
+      // React may not have flushed the setState updater yet, so finalMessages
+      // could still have streaming: true, causing the message to be filtered out.
+      const toSave = finalMessages.map((m) =>
+        m.id === assistantMsg.id ? { ...m, streaming: false } : m
+      )
+      await saveSession(toSave)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming, messages, model, saveSession])
