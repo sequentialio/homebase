@@ -262,6 +262,21 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Request failed" }))
+        if (res.status === 401) {
+          toast.error("Session expired — please log in again.", {
+            action: { label: "Log in", onClick: () => (window.location.href = "/login") },
+          })
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id
+                ? { ...m, content: "Session expired. Please log in again.", streaming: false }
+                : m
+            )
+          )
+          setIsStreaming(false)
+          setActiveTools([])
+          return
+        }
         throw new Error(err.error ?? "Request failed")
       }
 
