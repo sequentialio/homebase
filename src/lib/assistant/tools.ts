@@ -300,6 +300,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         account_id: { type: "string", description: "Bank account ID to associate with this expense (use account_id from get_finances)" },
         notes: { type: "string", description: "Any additional notes" },
         active: { type: "boolean", description: "Whether this expense is currently active (default true)" },
+        section_id: { type: "string", description: "Section ID to place the expense in. Use get_finances to see available expense_sections. Personal expenses go in the 'Personal' section, business expenses in 'Business'." },
       },
       required: ["name", "amount", "frequency"],
     },
@@ -459,7 +460,7 @@ async function getFinances(
     .toISOString()
     .split("T")[0]
 
-  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes] =
+  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes] =
     await Promise.all([
       supabase.from("bank_accounts").select("*"),
       supabase
@@ -472,6 +473,7 @@ async function getFinances(
       supabase.from("income_sources").select("*").eq("active", true),
       supabase.from("investments").select("*").order("name"),
       supabase.from("recurring_expenses").select("*").eq("active", true).order("position"),
+      supabase.from("expense_sections").select("*").order("position"),
     ])
 
   return JSON.stringify({
@@ -482,6 +484,7 @@ async function getFinances(
     income_sources: incomeRes.data ?? [],
     investments: investmentsRes.data ?? [],
     recurring_expenses: recurringRes.data ?? [],
+    expense_sections: expSectionsRes.data ?? [],
     period_days: days,
   })
 }
@@ -802,6 +805,7 @@ async function upsertRecurringExpense(
     account_id: (input.account_id as string) ?? null,
     notes: (input.notes as string) ?? null,
     active: (input.active as boolean) ?? true,
+    section_id: (input.section_id as string) ?? null,
     position: 0,
   }
   if (id) {
