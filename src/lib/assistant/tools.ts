@@ -295,7 +295,7 @@ export async function executeTool(
         return await upsertInvestment(supabase, userId, input)
 
       case "upsert_debt":
-        return await upsertDebt(supabase, input)
+        return await upsertDebt(supabase, userId, input)
 
       case "upsert_account":
         return await upsertAccount(supabase, userId, input)
@@ -304,7 +304,7 @@ export async function executeTool(
         return await upsertIncomeSource(supabase, userId, input)
 
       case "upsert_budget":
-        return await upsertBudget(supabase, input)
+        return await upsertBudget(supabase, userId, input)
 
       case "add_calendar_event":
         return await addCalendarEvent(supabase, userId, input)
@@ -526,10 +526,12 @@ async function upsertInvestment(
 
 async function upsertDebt(
   supabase: SupabaseClient<Database>,
+  userId: string,
   input: Record<string, unknown>
 ): Promise<string> {
   const id = input.id as string | undefined
   const payload = {
+    user_id: userId,
     name: input.name as string,
     balance: Number(input.balance),
     interest_rate: input.interest_rate != null ? Number(input.interest_rate) : null,
@@ -599,11 +601,13 @@ async function upsertIncomeSource(
 
 async function upsertBudget(
   supabase: SupabaseClient<Database>,
+  userId: string,
   input: Record<string, unknown>
 ): Promise<string> {
   const id = input.id as string | undefined
   const now = new Date()
   const payload = {
+    user_id: userId,
     category: input.category as string,
     monthly_limit: Number(input.monthly_limit),
     month: input.month != null ? Number(input.month) : now.getMonth() + 1,

@@ -524,7 +524,7 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
         : unsectioned.length
       const { data, error } = await supabase
         .from("debts")
-        .insert({ ...payload, position })
+        .insert({ ...payload, position, user_id: userId })
         .select()
         .single()
       if (error) { toast.error("Failed to add debt"); return }

@@ -571,7 +571,7 @@ export function BudgetsTab({
         : unsectioned.length
       const { data, error } = await supabase
         .from("budgets")
-        .insert({ ...payload, position })
+        .insert({ ...payload, position, user_id: userId })
         .select()
         .single()
       if (error) { toast.error("Failed to add budget"); return }
