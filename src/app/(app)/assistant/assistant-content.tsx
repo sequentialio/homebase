@@ -168,31 +168,47 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
 
   // ── File handling ──────────────────────────────────────────────────────────
 
+  const processImageFiles = useCallback(async (files: File[]) => {
+    const validTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"]
+    const results: ImageAttachment[] = []
+    for (const file of files) {
+      if (!validTypes.includes(file.type)) {
+        toast.error(`${file.name} is not a supported image type`)
+        continue
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds 5 MB limit`)
+        continue
+      }
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(",")[1])
+        reader.readAsDataURL(file)
+      })
+      results.push({ data, mediaType: file.type, previewUrl: URL.createObjectURL(file), name: file.name })
+    }
+    if (results.length > 0) setAttachments((prev) => [...prev, ...results])
+  }, [])
+
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? [])
-      const validTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"]
-      const results: ImageAttachment[] = []
-      for (const file of files) {
-        if (!validTypes.includes(file.type)) {
-          toast.error(`${file.name} is not a supported image type`)
-          continue
-        }
-        if (file.size > 5 * 1024 * 1024) {
-          toast.error(`${file.name} exceeds 5 MB limit`)
-          continue
-        }
-        const data = await new Promise<string>((resolve) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve((reader.result as string).split(",")[1])
-          reader.readAsDataURL(file)
-        })
-        results.push({ data, mediaType: file.type, previewUrl: URL.createObjectURL(file), name: file.name })
-      }
-      setAttachments((prev) => [...prev, ...results])
+      await processImageFiles(Array.from(e.target.files ?? []))
       e.target.value = ""
     },
-    []
+    [processImageFiles]
+  )
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const imageFiles = Array.from(e.clipboardData.items)
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((f): f is File => f !== null)
+      if (imageFiles.length === 0) return
+      e.preventDefault()
+      await processImageFiles(imageFiles)
+    },
+    [processImageFiles]
   )
 
   const removeAttachment = useCallback((index: number) => {
@@ -411,6 +427,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
                 textareaRef={textareaRef}
                 onInputChange={setInput}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
                 onSend={sendMessage}
@@ -447,6 +464,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
                 textareaRef={textareaRef}
                 onInputChange={setInput}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
                 onSend={sendMessage}
@@ -621,6 +639,7 @@ interface InputCardProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onInputChange: (v: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
   onAttachClick: () => void
   onRemoveAttachment: (i: number) => void
   onSend: () => void
@@ -628,7 +647,7 @@ interface InputCardProps {
 
 function InputCard({
   attachments, input, isStreaming, textareaRef,
-  onInputChange, onKeyDown, onAttachClick, onRemoveAttachment, onSend,
+  onInputChange, onKeyDown, onPaste, onAttachClick, onRemoveAttachment, onSend,
 }: InputCardProps) {
   return (
     <div className="rounded-2xl border border-border bg-card px-2 py-2 flex flex-col gap-2">
@@ -658,6 +677,7 @@ function InputCard({
         value={input}
         onChange={(e) => onInputChange(e.target.value)}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         placeholder="Ask anything about your household…"
         className="resize-none min-h-[36px] max-h-[160px] text-sm py-1 px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent"
         rows={1}
