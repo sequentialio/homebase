@@ -530,8 +530,11 @@ export type Database = {
         Row: {
           active: boolean
           amount: number
+          bonus_amount: number | null
+          bonus_frequency: string | null
           created_at: string
           frequency: string
+          gross_amount: number | null
           id: string
           name: string
           next_date: string | null
@@ -540,8 +543,11 @@ export type Database = {
         Insert: {
           active?: boolean
           amount: number
+          bonus_amount?: number | null
+          bonus_frequency?: string | null
           created_at?: string
           frequency: string
+          gross_amount?: number | null
           id?: string
           name: string
           next_date?: string | null
@@ -550,8 +556,11 @@ export type Database = {
         Update: {
           active?: boolean
           amount?: number
+          bonus_amount?: number | null
+          bonus_frequency?: string | null
           created_at?: string
           frequency?: string
+          gross_amount?: number | null
           id?: string
           name?: string
           next_date?: string | null
