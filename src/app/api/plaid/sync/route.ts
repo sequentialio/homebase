@@ -8,9 +8,17 @@
  * new/modified/removed transactions since the last sync.
  */
 import { NextResponse } from "next/server"
+import { timingSafeEqual } from "crypto"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { plaid, decryptToken } from "@/lib/plaid/client"
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit"
+
+function safeCompare(a: string | null, b: string | undefined): boolean {
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
 
 // Plaid: positive amount = money out (expense), negative = money in (income)
 function mapTransaction(tx: {
@@ -118,9 +126,9 @@ async function syncItem(itemId: string, userId: string) {
 }
 
 export async function POST(request: Request) {
-  // Cron path: verify CRON_SECRET
+  // Cron path: verify CRON_SECRET (timing-safe)
   const cronSecret = request.headers.get("x-cron-secret")
-  const isCron = cronSecret === process.env.CRON_SECRET
+  const isCron = safeCompare(cronSecret, process.env.CRON_SECRET)
 
   let userId: string | null = null
 
@@ -153,6 +161,10 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const rl = await checkRateLimit(`${getClientIp(request)}:/api/plaid/sync`, { limit: 5, windowSeconds: 60 })
+  if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+
   userId = user.id
 
   const admin = createAdminClient()

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit } from "@/lib/rate-limit"
 import { buildContext } from "@/lib/assistant/context"
 import { toolDefinitions, executeTool } from "@/lib/assistant/tools"
 
@@ -38,6 +39,9 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const rl = await checkRateLimit(`${user.id}:/api/assistant/chat`, { limit: 20, windowSeconds: 60 })
+  if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
   let body: { messages?: IncomingMessage[]; model?: string }
   try {

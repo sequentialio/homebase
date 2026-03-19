@@ -19,6 +19,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 // Allow large base64 payloads (up to ~10 MB images)
 export const maxDuration = 60
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const rl = await checkRateLimit(`${user.id}:/api/assistant/analyze`, { limit: 10, windowSeconds: 60 })
+  if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
   // 2. Parse request body
   let body: { image?: string; mediaType?: string }

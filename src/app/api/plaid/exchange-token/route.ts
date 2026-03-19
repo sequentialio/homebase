@@ -2,11 +2,15 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { plaid, encryptToken } from "@/lib/plaid/client"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const rl = await checkRateLimit(`${user.id}:/api/plaid/exchange-token`, { limit: 5, windowSeconds: 60 })
+  if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
   const { public_token, institution } = await request.json()
   if (!public_token) return NextResponse.json({ error: "public_token required" }, { status: 400 })

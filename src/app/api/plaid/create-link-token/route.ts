@@ -2,11 +2,15 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { plaid } from "@/lib/plaid/client"
 import { Products, CountryCode } from "plaid"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const rl = await checkRateLimit(`${user.id}:/api/plaid/create-link-token`, { limit: 10, windowSeconds: 60 })
+  if (!rl.success) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
   try {
     const response = await plaid.linkTokenCreate({
