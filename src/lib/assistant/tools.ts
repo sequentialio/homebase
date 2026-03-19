@@ -280,6 +280,31 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "upsert_recurring_expense",
+    description:
+      "Add a new recurring expense or update an existing one. Use when the user mentions a subscription, bill, or any regular recurring cost. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing recurring expense ID to update (omit to create new)" },
+        name: { type: "string", description: "Expense name (e.g. 'Netflix', 'Rent', 'Spectrum')" },
+        amount: { type: "number", description: "Amount per billing cycle in dollars" },
+        category: { type: "string", description: "Category (e.g. Subscriptions, Utilities, Housing, Insurance)" },
+        frequency: {
+          type: "string",
+          enum: ["weekly", "biweekly", "monthly", "quarterly", "annually"],
+          description: "How often this expense recurs",
+        },
+        billing_day: { type: "number", description: "Day of month bill is due (1-31, optional)" },
+        auto_pay: { type: "boolean", description: "Whether this is on autopay (default false)" },
+        account_id: { type: "string", description: "Bank account ID to associate with this expense (use account_id from get_finances)" },
+        notes: { type: "string", description: "Any additional notes" },
+        active: { type: "boolean", description: "Whether this expense is currently active (default true)" },
+      },
+      required: ["name", "amount", "frequency"],
+    },
+  },
+  {
     name: "save_note",
     description:
       "Save a note to persistent memory that will be available in all future conversations. Use this proactively to remember user preferences, patterns, goals, or anything useful. If a note with the same key exists, it will be updated.",
@@ -400,6 +425,9 @@ export async function executeTool(
       case "upsert_budget":
         return await upsertBudget(supabase, userId, input)
 
+      case "upsert_recurring_expense":
+        return await upsertRecurringExpense(supabase, userId, input)
+
       case "import_csv_transactions":
         return await importCsvTransactions(supabase, userId, input, csvContent)
 
@@ -431,7 +459,7 @@ async function getFinances(
     .toISOString()
     .split("T")[0]
 
-  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes] =
+  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes] =
     await Promise.all([
       supabase.from("bank_accounts").select("*"),
       supabase
@@ -443,6 +471,7 @@ async function getFinances(
       supabase.from("debts").select("*"),
       supabase.from("income_sources").select("*").eq("active", true),
       supabase.from("investments").select("*").order("name"),
+      supabase.from("recurring_expenses").select("*").eq("active", true).order("position"),
     ])
 
   return JSON.stringify({
@@ -452,6 +481,7 @@ async function getFinances(
     debts: debtsRes.data ?? [],
     income_sources: incomeRes.data ?? [],
     investments: investmentsRes.data ?? [],
+    recurring_expenses: recurringRes.data ?? [],
     period_days: days,
   })
 }
@@ -752,6 +782,38 @@ async function upsertBudget(
     const { error, data } = await supabase.from("budgets").insert(payload).select().single()
     if (error) return `Failed to add budget: ${error.message}`
     return `Budget added: ${data.category} — $${data.monthly_limit}/mo for ${data.month}/${data.year}`
+  }
+}
+
+async function upsertRecurringExpense(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    amount: Number(input.amount),
+    category: (input.category as string) ?? null,
+    frequency: input.frequency as string,
+    billing_day: input.billing_day != null ? Number(input.billing_day) : null,
+    auto_pay: (input.auto_pay as boolean) ?? false,
+    account_id: (input.account_id as string) ?? null,
+    notes: (input.notes as string) ?? null,
+    active: (input.active as boolean) ?? true,
+    position: 0,
+  }
+  if (id) {
+    const { error, data } = await supabase.from("recurring_expenses").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update recurring expense: ${error.message}`
+    return `Recurring expense updated: "${(data as Record<string,unknown>).name}" — $${(data as Record<string,unknown>).amount} ${(data as Record<string,unknown>).frequency}`
+  } else {
+    // Set position to end of list
+    const { count } = await supabase.from("recurring_expenses").select("*", { count: "exact", head: true }).eq("user_id", userId)
+    const { error, data } = await supabase.from("recurring_expenses").insert({ ...payload, position: count ?? 0 }).select().single()
+    if (error) return `Failed to add recurring expense: ${error.message}`
+    return `Recurring expense added: "${(data as Record<string,unknown>).name}" — $${(data as Record<string,unknown>).amount} ${(data as Record<string,unknown>).frequency}`
   }
 }
 
