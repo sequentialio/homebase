@@ -403,6 +403,9 @@ export function ExpensesTab({
   const [deleteSectionId, setDeleteSectionId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const dragOriginContainer = useRef<string>("")
+  // Tracks where the item currently IS (updated synchronously in handleDragOver
+  // before setSections, so subsequent handleDragOver calls never read stale position)
+  const activeCurContainer = useRef<string>("")
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -428,14 +431,19 @@ export function ExpensesTab({
   function handleDragStart(event: DragStartEvent) {
     const id = String(event.active.id)
     setActiveId(id)
-    dragOriginContainer.current = findContainer(id)
+    const container = findContainer(id)
+    dragOriginContainer.current = container
+    activeCurContainer.current = container
   }
 
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event
     if (!over) return
 
-    const activeContainer = findContainer(String(active.id))
+    // Use activeCurContainer (updated synchronously) instead of findContainer(active.id)
+    // which reads from sectionsRef and can be stale between setState and re-render,
+    // causing duplicate items to be added on rapid pointer moves.
+    const activeContainer = activeCurContainer.current
     const overContainer = findContainer(String(over.id))
     if (!activeContainer || !overContainer || activeContainer === overContainer) return
 
@@ -446,6 +454,10 @@ export function ExpensesTab({
 
     const activeExp = getExpense(activeContainer, String(active.id))
     if (!activeExp) return
+
+    // Update current container BEFORE setSections so the next handleDragOver
+    // call sees the correct position immediately (not stale sectionsRef)
+    activeCurContainer.current = overContainer
 
     if (overContainer === "unsectioned") {
       setSections((prev) =>
@@ -491,7 +503,7 @@ export function ExpensesTab({
     // Use the origin container captured at dragStart — by now handleDragOver has
     // already moved the item visually, so findContainer(active.id) would return
     // the destination, making activeContainer === overContainer for all cross-section drops.
-    const activeContainer = dragOriginContainer.current
+    const activeContainer = dragOriginContainer.current || findContainer(String(active.id))
     const overContainer = findContainer(String(over.id))
     if (!activeContainer || !overContainer) return
 
