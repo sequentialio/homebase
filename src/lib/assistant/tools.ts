@@ -294,7 +294,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 const MAX_AMOUNT = 10_000_000
-const MAX_BULK_TRANSACTIONS = 200
+const MAX_BULK_TRANSACTIONS = 500
 const MAX_SHOPPING_ITEMS = 50
 const MAX_STRING_LENGTH = 500
 

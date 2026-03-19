@@ -205,8 +205,8 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
     if (isStreaming) return
 
     // CSV content is sent to the API but not stored in the displayed message
-    // Cap at 100 data rows per file to avoid blowing the context window
-    const MAX_CSV_ROWS = 100
+    // Cap at 500 data rows per file — beyond that, ask user to split
+    const MAX_CSV_ROWS = 500
     const csvBlock = csvFiles?.length
       ? "\n\n" + csvFiles.map((c) => {
           const lines = c.content.split("\n")
@@ -216,9 +216,9 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
           const kept = truncated ? dataLines.slice(0, MAX_CSV_ROWS) : dataLines
           const csv = [header, ...kept].join("\n")
           const note = truncated
-            ? `\n[NOTE: CSV truncated to first ${MAX_CSV_ROWS} of ${dataLines.length} rows. Ask the user to upload in batches.]`
+            ? `\n[NOTE: CSV truncated to first ${MAX_CSV_ROWS} of ${dataLines.length} rows. Process these first, then ask the user to upload the remaining rows.]`
             : ""
-          return `[Attached file: ${c.name} (${dataLines.length} rows)]\n\`\`\`csv\n${csv}\n\`\`\`${note}`
+          return `[Attached file: ${c.name} (${dataLines.length} total rows)]\n\`\`\`csv\n${csv}\n\`\`\`${note}`
         }).join("\n\n")
       : ""
 
