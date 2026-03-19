@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import {
   ArrowUp, Paperclip, X, User, Loader2, Zap,
@@ -10,161 +10,46 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
+import {
+  useAssistant,
+  type ImageAttachment,
+  type Message,
+  type ChatSession,
+} from "@/lib/assistant/assistant-provider"
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ImageAttachment {
-  data: string
-  mediaType: string
-  previewUrl: string
-  name: string
-}
-
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  images?: ImageAttachment[]
-  imageCount?: number   // for messages loaded from DB (no previewUrl)
-  toolCalls?: string[]
-  streaming?: boolean
-}
-
-interface StoredMessage {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  toolCalls?: string[]
-  imageCount?: number
-}
-
-interface ChatSession {
-  id: string
-  title: string
-  messages: StoredMessage[]
-  created_at: string
-  updated_at: string
-}
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 interface AssistantContentProps {
-  userId: string
   userName: string
-  initialSessions: ChatSession[]
-}
-
-function storedToMessages(stored: StoredMessage[]): Message[] {
-  return stored.map((m) => ({
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    toolCalls: m.toolCalls,
-    imageCount: m.imageCount,
-    streaming: false,
-  }))
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
-  if (diffDays === 0) return "Today"
-  if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays} days ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AssistantContent({ userId, userName, initialSessions }: AssistantContentProps) {
-  const supabase = useMemo(() => createClient(), [])
+export function AssistantContent({ userName }: AssistantContentProps) {
+  const {
+    messages,
+    sessions,
+    currentSessionId,
+    isStreaming,
+    activeTools,
+    sendMessage,
+    selectSession,
+    startNewChat,
+  } = useAssistant()
 
-  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions)
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
-    initialSessions[0]?.id ?? null
-  )
-  const [messages, setMessages] = useState<Message[]>(() =>
-    initialSessions[0] ? storedToMessages(initialSessions[0].messages) : []
-  )
-  const [showSessions, setShowSessions] = useState(false)
-  const [sessionsOpen, setSessionsOpen] = useState(false)
-
+  // UI-local state (safe to lose on navigate)
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ImageAttachment[]>([])
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [activeTools, setActiveTools] = useState<string[]>([])
+  const [showSessions, setShowSessions] = useState(false)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // Use ref so saveSession callback always has current value without re-creating
-  const currentSessionIdRef = useRef(currentSessionId)
-  useEffect(() => { currentSessionIdRef.current = currentSessionId }, [currentSessionId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, activeTools])
-
-  // ── Session management ─────────────────────────────────────────────────────
-
-  function selectSession(session: ChatSession) {
-    setCurrentSessionId(session.id)
-    currentSessionIdRef.current = session.id
-    setMessages(storedToMessages(session.messages))
-    setInput("")
-    setAttachments([])
-    setShowSessions(false)
-  }
-
-  function startNewChat() {
-    setCurrentSessionId(null)
-    currentSessionIdRef.current = null
-    setMessages([])
-    setInput("")
-    setAttachments([])
-    setShowSessions(false)
-    setTimeout(() => textareaRef.current?.focus(), 50)
-  }
-
-  const saveSession = useCallback(async (finalMessages: Message[]) => {
-    const stored: StoredMessage[] = finalMessages
-      .filter((m) => !m.streaming)
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        toolCalls: m.toolCalls?.length ? m.toolCalls : undefined,
-        imageCount: (m.images?.length || m.imageCount) || undefined,
-      }))
-
-    const sid = currentSessionIdRef.current
-
-    if (!sid) {
-      const firstUser = finalMessages.find((m) => m.role === "user")
-      const title = firstUser?.content.trim().slice(0, 60) || "New Chat"
-      const { data, error } = await supabase
-        .from("chat_sessions")
-        .insert({ user_id: userId, title, messages: stored as unknown as import("@/types/database").Json })
-        .select("id, title, messages, created_at, updated_at")
-        .single()
-      if (error || !data) return
-      currentSessionIdRef.current = data.id
-      setCurrentSessionId(data.id)
-      setSessions((prev) => [data as unknown as ChatSession, ...prev])
-    } else {
-      const { data } = await supabase
-        .from("chat_sessions")
-        .update({ messages: stored as unknown as import("@/types/database").Json, updated_at: new Date().toISOString() })
-        .eq("id", sid)
-        .select("id, title, messages, created_at, updated_at")
-        .single()
-      if (data) {
-        setSessions((prev) =>
-          prev.map((s) => (s.id === sid ? (data as unknown as ChatSession) : s))
-        )
-      }
-    }
-  }, [supabase, userId])
 
   // ── File handling ──────────────────────────────────────────────────────────
 
@@ -218,145 +103,37 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
     })
   }, [])
 
-  // ── Send message ───────────────────────────────────────────────────────────
+  // ── Send ───────────────────────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async () => {
+  const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text && attachments.length === 0) return
     if (isStreaming) return
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      images: attachments.length > 0 ? [...attachments] : undefined,
-    }
-    const assistantMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "",
-      streaming: true,
-      toolCalls: [],
-    }
-
-    const nextMessages = [...messages, userMsg, assistantMsg]
-    setMessages(nextMessages)
+    const imgs = [...attachments]
     setInput("")
     setAttachments([])
-    setIsStreaming(true)
-    setActiveTools([])
-
-    const history = [...messages, userMsg].map((m) => ({
-      role: m.role,
-      content: m.content,
-      images: m.images?.map((img) => ({ data: img.data, mediaType: img.mediaType })),
-    }))
-
-    let finalMessages = nextMessages
-
-    try {
-      const res = await fetch("/api/assistant/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Request failed" }))
-        if (res.status === 401) {
-          toast.error("Session expired — please log in again.", {
-            action: { label: "Log in", onClick: () => (window.location.href = "/login") },
-          })
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMsg.id
-                ? { ...m, content: "Session expired. Please log in again.", streaming: false }
-                : m
-            )
-          )
-          setIsStreaming(false)
-          setActiveTools([])
-          return
-        }
-        throw new Error(err.error ?? "Request failed")
-      }
-
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split("\n\n")
-        buffer = parts.pop() ?? ""
-
-        for (const part of parts) {
-          const line = part.replace(/^data: /, "").trim()
-          if (!line) continue
-          try {
-            const event = JSON.parse(line)
-            if (event.type === "delta") {
-              setMessages((prev) => {
-                const updated = prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, content: m.content + event.text } : m
-                )
-                finalMessages = updated
-                return updated
-              })
-            } else if (event.type === "tool_start") {
-              setActiveTools((prev) => [...prev, event.name])
-            } else if (event.type === "tool_done") {
-              setActiveTools((prev) => prev.filter((n) => n !== event.name))
-              setMessages((prev) => {
-                const updated = prev.map((m) =>
-                  m.id === assistantMsg.id
-                    ? { ...m, toolCalls: [...(m.toolCalls ?? []), event.name] }
-                    : m
-                )
-                finalMessages = updated
-                return updated
-              })
-            } else if (event.type === "done") {
-              setMessages((prev) => {
-                const updated = prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, streaming: false } : m
-                )
-                finalMessages = updated
-                return updated
-              })
-            } else if (event.type === "error") {
-              throw new Error(event.message)
-            }
-          } catch {
-            // ignore parse errors
-          }
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong"
-      toast.error(msg)
-      setMessages((prev) => {
-        const updated = prev.map((m) =>
-          m.id === assistantMsg.id
-            ? { ...m, content: "Sorry, something went wrong. Please try again.", streaming: false }
-            : m
-        )
-        finalMessages = updated
-        return updated
-      })
-    } finally {
-      setIsStreaming(false)
-      setActiveTools([])
-      await saveSession(finalMessages)
-    }
-  }, [input, attachments, isStreaming, messages, saveSession])
+    await sendMessage(text, imgs)
+  }, [input, attachments, isStreaming, sendMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSend()
     }
+  }
+
+  const handleSelectSession = (session: ChatSession) => {
+    selectSession(session)
+    setShowSessions(false)
+    setInput("")
+    setAttachments([])
+  }
+
+  const handleNewChat = () => {
+    startNewChat(() => textareaRef.current?.focus())
+    setInput("")
+    setAttachments([])
+    setShowSessions(false)
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -376,7 +153,6 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0">
-          {/* Mobile sessions toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -395,7 +171,6 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
           </span>
 
           <div className="flex items-center gap-1 ml-auto">
-            {/* Desktop: toggle sessions panel */}
             <Button
               variant="ghost"
               size="icon"
@@ -407,12 +182,11 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
                 ? <PanelRightClose className="size-4" />
                 : <PanelRightOpen className="size-4" />}
             </Button>
-            {/* New chat */}
             <Button
               variant="ghost"
               size="icon"
               className="!size-8 !min-h-0 text-muted-foreground hover:text-foreground"
-              onClick={startNewChat}
+              onClick={handleNewChat}
               title="New chat"
             >
               <Plus className="size-4" />
@@ -420,7 +194,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
           </div>
         </div>
 
-        {/* Hidden file input — shared by both layouts */}
+        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -431,7 +205,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
         />
 
         {messages.length === 0 ? (
-          /* ── Empty state: greeting + input centered ── */
+          /* ── Empty state ── */
           <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 pb-8">
             <EmptyState userName={userName} />
             <div className="w-full max-w-2xl">
@@ -445,12 +219,12 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
                 onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
-                onSend={sendMessage}
+                onSend={handleSend}
               />
             </div>
           </div>
         ) : (
-          /* ── Active chat: messages scroll + input pinned bottom ── */
+          /* ── Active chat ── */
           <>
             <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
               {messages.map((msg) => (
@@ -482,14 +256,14 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
                 onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
-                onSend={sendMessage}
+                onSend={handleSend}
               />
             </div>
           </>
         )}
       </div>
 
-      {/* ── Sessions sidebar (right side on desktop, slide-from-right on mobile) ── */}
+      {/* ── Sessions sidebar ── */}
       <aside className={cn(
         "flex flex-col shrink-0 border-l border-border bg-sidebar text-sidebar-foreground overflow-hidden transition-all duration-200",
         "fixed inset-y-0 right-0 z-30 md:static md:z-auto md:translate-x-0",
@@ -502,7 +276,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
           <Button
             variant="ghost"
             className="w-full justify-start gap-2 text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
-            onClick={startNewChat}
+            onClick={handleNewChat}
           >
             <Plus className="size-4" />
             New Chat
@@ -518,7 +292,7 @@ export function AssistantContent({ userId, userName, initialSessions }: Assistan
           {sessions.map((session) => (
             <button
               key={session.id}
-              onClick={() => selectSession(session)}
+              onClick={() => handleSelectSession(session)}
               className={cn(
                 "w-full text-left rounded-md px-3 py-2 text-sm transition-colors",
                 currentSessionId === session.id
@@ -558,7 +332,6 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
 
       <div className={cn("flex flex-col gap-1 max-w-[85%] md:max-w-[75%]", isUser && "items-end")}>
-        {/* Live image previews (new messages) */}
         {message.images && message.images.length > 0 && (
           <div className="flex gap-1 flex-wrap">
             {message.images.map((img, i) => (
@@ -572,7 +345,6 @@ function MessageBubble({ message }: { message: Message }) {
             ))}
           </div>
         )}
-        {/* Loaded-from-DB image indicator */}
         {!message.images && (message.imageCount ?? 0) > 0 && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1">
             <Paperclip className="size-3" />
@@ -645,7 +417,7 @@ function EmptyState({ userName }: { userName: string }) {
   )
 }
 
-// ── InputCard sub-component ────────────────────────────────────────────────────
+// ── InputCard ──────────────────────────────────────────────────────────────────
 
 interface InputCardProps {
   attachments: { previewUrl: string; name: string }[]
@@ -726,6 +498,8 @@ function InputCard({
   )
 }
 
+// ── Utilities ──────────────────────────────────────────────────────────────────
+
 function FormattedMessage({ content }: { content: string }) {
   const lines = content.split("\n")
   return (
@@ -758,6 +532,16 @@ function renderInline(text: string): React.ReactNode {
   })
 }
 
+function formatRelativeDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return `${diffDays} days ago`
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
 function formatToolName(name: string): string {
   const labels: Record<string, string> = {
     get_finances: "Finances",
@@ -767,6 +551,11 @@ function formatToolName(name: string): string {
     log_transaction: "Logging transaction",
     add_to_shopping_list: "Adding to list",
     add_calendar_event: "Adding event",
+    upsert_investment: "Updating investment",
+    upsert_debt: "Updating debt",
+    upsert_account: "Updating account",
+    upsert_income_source: "Updating income",
+    upsert_budget: "Updating budget",
   }
   return labels[name] ?? name
 }

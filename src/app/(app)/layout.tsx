@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { AppShell } from "@/components/layout/app-shell"
 import { Toaster } from "@/components/ui/sonner"
 import { SessionTimeout } from "@/components/session-timeout"
+import { AssistantProvider } from "@/lib/assistant/assistant-provider"
 import type { Tables } from "@/types/database"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -19,10 +20,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <AppShell initialProfile={profile}>
-      {children}
-      <Toaster />
-      <SessionTimeout />
-    </AppShell>
+    <AssistantProvider userId={user?.id ?? ""}>
+      <AppShell initialProfile={profile}>
+        {children}
+        <Toaster />
+        <SessionTimeout />
+      </AppShell>
+    </AssistantProvider>
   )
 }
