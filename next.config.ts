@@ -17,14 +17,16 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Security-Policy",
             value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.plaid.com",
+              "default-src 'self' https://*.plaid.com https://cdn.plaid.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.plaid.com https://*.plaid.com",
               "style-src 'self' 'unsafe-inline'",
               // Add your CDN/storage domains to img-src as needed
               "img-src 'self' data: blob: https://*.supabase.co",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.plaid.com",
-              "frame-src 'self' https://*.plaid.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.plaid.com https://cdn.plaid.com",
+              "frame-src 'self' https://*.plaid.com https://cdn.plaid.com",
+              "worker-src 'self' blob: https://cdn.plaid.com https://*.plaid.com",
+              "child-src 'self' https://*.plaid.com https://cdn.plaid.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
