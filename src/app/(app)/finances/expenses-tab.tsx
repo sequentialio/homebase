@@ -402,6 +402,7 @@ export function ExpensesTab({
   const [newSectionName, setNewSectionName] = useState("")
   const [deleteSectionId, setDeleteSectionId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const dragOriginContainer = useRef<string>("")
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -425,7 +426,9 @@ export function ExpensesTab({
   }
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id))
+    const id = String(event.active.id)
+    setActiveId(id)
+    dragOriginContainer.current = findContainer(id)
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -485,11 +488,15 @@ export function ExpensesTab({
     setActiveId(null)
     if (!over) return
 
-    const activeContainer = findContainer(String(active.id))
+    // Use the origin container captured at dragStart — by now handleDragOver has
+    // already moved the item visually, so findContainer(active.id) would return
+    // the destination, making activeContainer === overContainer for all cross-section drops.
+    const activeContainer = dragOriginContainer.current
     const overContainer = findContainer(String(over.id))
     if (!activeContainer || !overContainer) return
 
     if (activeContainer === overContainer) {
+      // Same-section reorder
       if (activeContainer === "unsectioned") {
         const oldIdx = unsectionedRef.current.findIndex((e) => e.id === active.id)
         const newIdx = unsectionedRef.current.findIndex((e) => e.id === over.id)
@@ -510,13 +517,25 @@ export function ExpensesTab({
         }
       }
     } else {
+      // Cross-section move — handleDragOver already updated visual state.
+      // Persist section_id change + renumber positions in both source and destination.
       const newSectionId = overContainer === "unsectioned" ? null : overContainer
       await supabase.from("recurring_expenses").update({ section_id: newSectionId }).eq("id", String(active.id))
+
+      // Persist destination
       if (overContainer === "unsectioned") {
         await persistPositions("unsectioned", unsectionedRef.current)
       } else {
         const destSec = sectionsRef.current.find((s) => s.id === overContainer)
         if (destSec) await persistPositions(overContainer, destSec.expenses)
+      }
+
+      // Persist source (renumber positions after removal)
+      if (activeContainer === "unsectioned") {
+        await persistPositions("unsectioned", unsectionedRef.current)
+      } else {
+        const srcSec = sectionsRef.current.find((s) => s.id === activeContainer)
+        if (srcSec) await persistPositions(activeContainer, srcSec.expenses)
       }
     }
   }
