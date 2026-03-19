@@ -232,7 +232,7 @@ export function CalendarContent({
       map.set(key, [...existing, entry])
     }
 
-    // HomeBase events
+    // Mita events
     events.forEach((e) => {
       const d = new Date(e.start_at)
       const key = dateKey(d)
@@ -508,7 +508,7 @@ export function CalendarContent({
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary inline-block" /> HomeBase</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary inline-block" /> Mita</span>
         {hasAsana && <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" /> Asana</span>}
         {hasGoogle && <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-500 inline-block" /> Google</span>}
         <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-orange-500 inline-block" /> Cleaning</span>

@@ -38,7 +38,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "get_calendar_events",
     description:
-      "Get calendar events for a date range. Returns HomeBase events and synced Asana tasks.",
+      "Get calendar events for a date range. Returns Mita events and synced Asana tasks.",
     input_schema: {
       type: "object",
       properties: {
@@ -114,7 +114,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "add_calendar_event",
     description:
-      "Add a new event to the HomeBase calendar.",
+      "Add a new event to the Mita calendar.",
     input_schema: {
       type: "object",
       properties: {

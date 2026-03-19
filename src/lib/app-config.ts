@@ -2,7 +2,7 @@
  * App-wide constants. Update these when starting a new project.
  */
 
-export const APP_NAME = "HomeBase"
+export const APP_NAME = "Mita"
 export const APP_VERSION = "v0.1.0"
 export const APP_CREATOR = "Sequential Analytics LLC"
 

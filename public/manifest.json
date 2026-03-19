@@ -1,6 +1,6 @@
 {
-  "name": "HomeBase",
-  "short_name": "HomeBase",
+  "name": "Mita",
+  "short_name": "Mita",
   "description": "Personal household management",
   "start_url": "/dashboard",
   "display": "standalone",
