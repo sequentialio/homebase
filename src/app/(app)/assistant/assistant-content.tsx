@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import {
   ArrowUp, Paperclip, X, User, Loader2, Zap,
-  Plus, Menu, PanelRightClose, PanelRightOpen,
+  Plus, Menu, PanelRightClose, PanelRightOpen, FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -40,6 +40,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
   // UI-local state (safe to lose on navigate)
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+  const [csvAttachments, setCsvAttachments] = useState<{ name: string; content: string }[]>([])
   const [showSessions, setShowSessions] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
 
@@ -54,25 +55,35 @@ export function AssistantContent({ userName }: AssistantContentProps) {
   // ── File handling ──────────────────────────────────────────────────────────
 
   const processImageFiles = useCallback(async (files: File[]) => {
-    const validTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"]
-    const results: ImageAttachment[] = []
+    const imageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"]
+    const imageResults: ImageAttachment[] = []
+    const csvResults: { name: string; content: string }[] = []
+
     for (const file of files) {
-      if (!validTypes.includes(file.type)) {
-        toast.error(`${file.name} is not a supported image type`)
-        continue
+      if (file.name.endsWith(".csv") || file.type === "text/csv") {
+        if (file.size > 2 * 1024 * 1024) {
+          toast.error(`${file.name} exceeds 2 MB limit`)
+          continue
+        }
+        const content = await file.text()
+        csvResults.push({ name: file.name, content })
+      } else if (imageTypes.includes(file.type)) {
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(`${file.name} exceeds 5 MB limit`)
+          continue
+        }
+        const data = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve((reader.result as string).split(",")[1])
+          reader.readAsDataURL(file)
+        })
+        imageResults.push({ data, mediaType: file.type, previewUrl: URL.createObjectURL(file), name: file.name })
+      } else {
+        toast.error(`${file.name} is not a supported file type`)
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(`${file.name} exceeds 5 MB limit`)
-        continue
-      }
-      const data = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve((reader.result as string).split(",")[1])
-        reader.readAsDataURL(file)
-      })
-      results.push({ data, mediaType: file.type, previewUrl: URL.createObjectURL(file), name: file.name })
     }
-    if (results.length > 0) setAttachments((prev) => [...prev, ...results])
+    if (imageResults.length > 0) setAttachments((prev) => [...prev, ...imageResults])
+    if (csvResults.length > 0) setCsvAttachments((prev) => [...prev, ...csvResults])
   }, [])
 
   const handleFileChange = useCallback(
@@ -107,13 +118,18 @@ export function AssistantContent({ userName }: AssistantContentProps) {
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
-    if (!text && attachments.length === 0) return
+    if (!text && attachments.length === 0 && csvAttachments.length === 0) return
     if (isStreaming) return
     const imgs = [...attachments]
+    // Append CSV contents to the message text
+    const csvBlock = csvAttachments.length > 0
+      ? "\n\n" + csvAttachments.map((c) => `**${c.name}:**\n\`\`\`csv\n${c.content}\n\`\`\``).join("\n\n")
+      : ""
     setInput("")
     setAttachments([])
-    await sendMessage(text, imgs)
-  }, [input, attachments, isStreaming, sendMessage])
+    setCsvAttachments([])
+    await sendMessage(text + csvBlock, imgs)
+  }, [input, attachments, csvAttachments, isStreaming, sendMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -127,12 +143,14 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     setShowSessions(false)
     setInput("")
     setAttachments([])
+    setCsvAttachments([])
   }
 
   const handleNewChat = () => {
     startNewChat(() => textareaRef.current?.focus())
     setInput("")
     setAttachments([])
+    setCsvAttachments([])
     setShowSessions(false)
   }
 
@@ -198,7 +216,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="image/png,image/jpeg,image/webp,image/gif,.csv"
           multiple
           className="hidden"
           onChange={handleFileChange}
@@ -211,6 +229,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
             <div className="w-full max-w-2xl">
               <InputCard
                 attachments={attachments}
+                csvAttachments={csvAttachments}
                 input={input}
                 isStreaming={isStreaming}
                 textareaRef={textareaRef}
@@ -219,6 +238,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
                 onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
+                onRemoveCsv={(i) => setCsvAttachments((prev) => prev.filter((_, idx) => idx !== i))}
                 onSend={handleSend}
               />
             </div>
@@ -248,6 +268,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
             <div className="shrink-0 px-3 md:px-5 py-3">
               <InputCard
                 attachments={attachments}
+                csvAttachments={csvAttachments}
                 input={input}
                 isStreaming={isStreaming}
                 textareaRef={textareaRef}
@@ -256,6 +277,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
                 onPaste={handlePaste}
                 onAttachClick={() => fileInputRef.current?.click()}
                 onRemoveAttachment={removeAttachment}
+                onRemoveCsv={(i) => setCsvAttachments((prev) => prev.filter((_, idx) => idx !== i))}
                 onSend={handleSend}
               />
             </div>
@@ -421,6 +443,7 @@ function EmptyState({ userName }: { userName: string }) {
 
 interface InputCardProps {
   attachments: { previewUrl: string; name: string }[]
+  csvAttachments: { name: string; content: string }[]
   input: string
   isStreaming: boolean
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
@@ -429,16 +452,18 @@ interface InputCardProps {
   onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
   onAttachClick: () => void
   onRemoveAttachment: (i: number) => void
+  onRemoveCsv: (i: number) => void
   onSend: () => void
 }
 
 function InputCard({
-  attachments, input, isStreaming, textareaRef,
-  onInputChange, onKeyDown, onPaste, onAttachClick, onRemoveAttachment, onSend,
+  attachments, csvAttachments, input, isStreaming, textareaRef,
+  onInputChange, onKeyDown, onPaste, onAttachClick, onRemoveAttachment, onRemoveCsv, onSend,
 }: InputCardProps) {
+  const hasAttachments = attachments.length > 0 || csvAttachments.length > 0
   return (
     <div className="rounded-2xl border border-border bg-card px-2 py-2 flex flex-col gap-2">
-      {attachments.length > 0 && (
+      {hasAttachments && (
         <div className="flex gap-2 flex-wrap px-1">
           {attachments.map((att, i) => (
             <div key={i} className="relative group">
@@ -453,6 +478,18 @@ function InputCard({
                 className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full size-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="size-2.5" />
+              </button>
+            </div>
+          ))}
+          {csvAttachments.map((csv, i) => (
+            <div key={i} className="relative group flex items-center gap-1.5 bg-muted border border-border rounded-md px-2.5 py-1.5 text-xs">
+              <FileText className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="max-w-[120px] truncate">{csv.name}</span>
+              <button
+                onClick={() => onRemoveCsv(i)}
+                className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="size-3" />
               </button>
             </div>
           ))}
@@ -487,7 +524,7 @@ function InputCard({
           size="icon"
           className="size-9 rounded-xl bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-30"
           onClick={onSend}
-          disabled={isStreaming || (!input.trim() && attachments.length === 0)}
+          disabled={isStreaming || (!input.trim() && attachments.length === 0 && csvAttachments.length === 0)}
         >
           {isStreaming
             ? <Loader2 className="size-4 animate-spin" />
