@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -68,9 +69,16 @@ export default function ResetPasswordPage() {
   const firstName = userName ? userName.split(" ")[0] : ""
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
+    <div className="dark flex min-h-screen items-center justify-center px-4 bg-black">
+      <Card className="w-full max-w-sm shadow-lg border border-white/10">
+        <CardHeader className="text-center items-center gap-4 pb-6">
+          <Image
+            src="/logos/mita_full_cropped.png"
+            alt="MITA"
+            width={280}
+            height={96}
+            className="object-contain h-14 w-auto mx-auto block"
+          />
           <CardTitle className="text-2xl font-bold">
             {isNewUser ? `Welcome${firstName ? `, ${firstName}` : ""}!` : "Set New Password"}
           </CardTitle>
