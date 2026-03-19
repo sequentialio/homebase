@@ -32,6 +32,8 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     currentSessionId,
     isStreaming,
     activeTools,
+    model,
+    setModel,
     sendMessage,
     selectSession,
     startNewChat,
@@ -185,7 +187,33 @@ export function AssistantContent({ userName }: AssistantContentProps) {
               : "Claude"}
           </span>
 
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Model toggle */}
+            <div className="flex items-center rounded-full border border-border bg-muted/40 p-0.5 text-xs">
+              <button
+                onClick={() => setModel("claude-sonnet-4-5")}
+                className={cn(
+                  "rounded-full px-2.5 py-1 font-medium transition-colors",
+                  model === "claude-sonnet-4-5"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Sonnet
+              </button>
+              <button
+                onClick={() => setModel("claude-opus-4-6")}
+                className={cn(
+                  "rounded-full px-2.5 py-1 font-medium transition-colors",
+                  model === "claude-opus-4-6"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Opus
+              </button>
+            </div>
+
             <Button
               variant="ghost"
               size="icon"

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { messages?: IncomingMessage[] }
+  let body: { messages?: IncomingMessage[]; model?: string }
   try {
     body = await request.json()
   } catch {
@@ -50,6 +50,9 @@ export async function POST(request: Request) {
   if (!messages?.length) {
     return NextResponse.json({ error: "messages required" }, { status: 400 })
   }
+
+  const ALLOWED_MODELS = ["claude-opus-4-6", "claude-sonnet-4-5"]
+  const model = ALLOWED_MODELS.includes(body.model ?? "") ? body.model! : "claude-sonnet-4-5"
 
   // Build system prompt with fresh context
   const context = await buildContext(supabase, user.id)
@@ -99,7 +102,7 @@ export async function POST(request: Request) {
 
         for (let i = 0; i < 10; i++) {
           const stream = anthropic.messages.stream({
-            model: "claude-opus-4-6",
+            model,
             max_tokens: 4096,
             thinking: { type: "adaptive" },
             system: systemPrompt,

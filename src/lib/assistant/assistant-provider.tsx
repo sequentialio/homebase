@@ -68,6 +68,8 @@ export function storedToMessages(stored: StoredMessage[]): Message[] {
 
 // ── Context ────────────────────────────────────────────────────────────────────
 
+export type AssistantModel = "claude-opus-4-6" | "claude-sonnet-4-5"
+
 interface AssistantContextValue {
   messages: Message[]
   setMessages: Dispatch<SetStateAction<Message[]>>
@@ -77,6 +79,8 @@ interface AssistantContextValue {
   setCurrentSessionId: Dispatch<SetStateAction<string | null>>
   isStreaming: boolean
   activeTools: string[]
+  model: AssistantModel
+  setModel: (m: AssistantModel) => void
   sendMessage: (text: string, images: ImageAttachment[], csvFiles?: { name: string; content: string }[]) => Promise<void>
   selectSession: (session: ChatSession) => void
   startNewChat: (focusCb?: () => void) => void
@@ -105,6 +109,15 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeTools, setActiveTools] = useState<string[]>([])
+  const [model, setModelState] = useState<AssistantModel>(() => {
+    if (typeof window === "undefined") return "claude-sonnet-4-5"
+    return (localStorage.getItem("assistant_model") as AssistantModel) ?? "claude-sonnet-4-5"
+  })
+
+  const setModel = useCallback((m: AssistantModel) => {
+    setModelState(m)
+    localStorage.setItem("assistant_model", m)
+  }, [])
 
   // Ref so saveSession always closes over the current session ID
   const currentSessionIdRef = useRef<string | null>(null)
@@ -229,7 +242,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, model }),
       })
 
       if (!res.ok) {
@@ -349,7 +362,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
       await saveSession(finalMessages)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStreaming, messages, saveSession])
+  }, [isStreaming, messages, model, saveSession])
 
   // ── Session navigation ─────────────────────────────────────────────────────
 
@@ -374,6 +387,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         currentSessionId, setCurrentSessionId,
         isStreaming,
         activeTools,
+        model, setModel,
         sendMessage,
         selectSession,
         startNewChat,
