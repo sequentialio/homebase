@@ -282,7 +282,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
               {activeTools.length > 0 && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground pl-10">
                   <Loader2 className="size-3 animate-spin" />
-                  {activeTools.map((t) => (
+                  {[...new Set(activeTools)].map((t) => (
                     <span key={t} className="bg-muted px-2 py-0.5 rounded-full">
                       {formatToolName(t)}
                     </span>

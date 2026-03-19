@@ -352,7 +352,7 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
                 })
               }
             } else if (event.type === "tool_start") {
-              setActiveTools((prev) => [...prev, event.name])
+              setActiveTools((prev) => prev.includes(event.name) ? prev : [...prev, event.name])
             } else if (event.type === "tool_done") {
               setActiveTools((prev) => prev.filter((n) => n !== event.name))
               if (event.error) {
