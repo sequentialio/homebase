@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -12,9 +13,8 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
-import { APP_NAME, APP_VERSION, APP_CREATOR } from "@/lib/app-config"
+import { APP_VERSION, APP_CREATOR } from "@/lib/app-config"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -51,8 +51,14 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 bg-white dark:bg-black">
       <Card className="w-full max-w-sm shadow-lg border border-black/10 dark:border-white/10">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">{APP_NAME}</CardTitle>
+        <CardHeader className="text-center items-center gap-3">
+          <Image
+            src="/logos/mita_full.png"
+            alt="MITA"
+            width={140}
+            height={44}
+            className="object-contain h-11 w-auto"
+          />
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>

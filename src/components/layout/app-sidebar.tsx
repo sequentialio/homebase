@@ -99,11 +99,11 @@ export function AppSidebar({ profile }: AppSidebarProps) {
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Image
-            src="/logos/logo_navbar_1x.png"
-            alt={APP_NAME}
-            width={140}
-            height={28}
-            className="object-contain h-7 w-auto"
+            src="/logos/mita_full.png"
+            alt="MITA"
+            width={120}
+            height={36}
+            className="object-contain h-8 w-auto"
           />
         </Link>
       </div>
