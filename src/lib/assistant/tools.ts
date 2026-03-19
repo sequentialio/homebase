@@ -82,6 +82,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
           type: "string",
           description: "Date in YYYY-MM-DD format (default: today)",
         },
+        scope: {
+          type: "string",
+          enum: ["personal", "business"],
+          description: "Whether this is a personal or business transaction (default: personal)",
+        },
       },
       required: ["type", "amount", "description"],
     },
@@ -104,6 +109,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
               description: { type: "string", description: "Merchant or description" },
               category: { type: "string", description: "Category (e.g. Groceries, Dining, Gas, Transfer, Entertainment)" },
               date: { type: "string", description: "Date in YYYY-MM-DD format" },
+              scope: { type: "string", enum: ["personal", "business"], description: "personal or business (default: personal)" },
             },
             required: ["type", "amount", "description"],
           },
@@ -131,6 +137,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
         end_date: {
           type: "string",
           description: "Only import transactions on or before this date (YYYY-MM-DD). Omit for all dates.",
+        },
+        scope: {
+          type: "string",
+          enum: ["personal", "business"],
+          description: "Tag all imported transactions as personal or business (default: personal)",
         },
       },
     },
@@ -506,6 +517,9 @@ async function logTransaction(
   if (descErr) return descErr
   if (input.type !== "income" && input.type !== "expense") return `Invalid type — must be "income" or "expense".`
 
+  const scope = (input.scope as string) ?? "personal"
+  if (scope !== "personal" && scope !== "business") return `Invalid scope — must be "personal" or "business".`
+
   const { error, data } = await supabase
     .from("transactions")
     .insert({
@@ -516,12 +530,13 @@ async function logTransaction(
       category: (input.category as string) ?? null,
       date:
         (input.date as string) ?? new Date().toISOString().split("T")[0],
-    })
+      scope,
+    } as never)
     .select()
     .single()
 
   if (error) return `Failed to log transaction: ${error.message}`
-  return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date})`
+  return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date}) [${scope}]`
 }
 
 async function bulkLogTransactions(
@@ -550,9 +565,10 @@ async function bulkLogTransactions(
     description: t.description,
     category: t.category ?? null,
     date: t.date ?? today,
+    scope: (t as Record<string, unknown>).scope ?? "personal",
   }))
 
-  const { error, data } = await supabase.from("transactions").insert(rows).select()
+  const { error, data } = await supabase.from("transactions").insert(rows as never).select()
   if (error) return `Failed to log transactions: ${error.message}`
   return `Logged ${data.length} transaction${data.length !== 1 ? "s" : ""} successfully.`
 }
@@ -771,6 +787,7 @@ async function importCsvTransactions(
   )
   const startDate = input.start_date as string | undefined
   const endDate = input.end_date as string | undefined
+  const scope = (input.scope as string) ?? "personal"
 
   // Parse CSV
   const lines = csvContent.split("\n").filter((l) => l.trim())
@@ -795,7 +812,7 @@ async function importCsvTransactions(
     return null
   }
 
-  const rows: { user_id: string; type: string; amount: number; description: string; category: string | null; date: string }[] = []
+  const rows: { user_id: string; type: string; amount: number; description: string; category: string | null; date: string; scope: string }[] = []
   let skippedTransfers = 0
   let skippedDateFilter = 0
   let parseErrors = 0
@@ -831,6 +848,7 @@ async function importCsvTransactions(
       description: desc,
       category: category || null,
       date,
+      scope,
     })
   }
 
@@ -847,7 +865,7 @@ async function importCsvTransactions(
   const batchSize = 100
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize)
-    const { error, data } = await supabase.from("transactions").insert(batch).select()
+    const { error, data } = await supabase.from("transactions").insert(batch as never).select()
     if (error) return `Failed at batch ${Math.floor(i / batchSize) + 1}: ${error.message}. ${totalInserted} transactions were already saved.`
     totalInserted += data.length
   }
