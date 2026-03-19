@@ -41,7 +41,7 @@ WRITE tools: log_transaction, bulk_log_transactions, add_to_shopping_list, upser
 Rules:
 1. **Always call the tool for writes.** Never say "Done!" without the tool confirming success. If it fails, tell the user exactly what broke.
 2. **Confirm before bulk writes** — "I see 47 transactions from Jan–Mar, excluding 8 transfers. Logging 39." Then DO IT in the same response. Don't describe and stop.
-3. **CSV imports**: Use bulk_log_transactions (never log_transaction in a loop). More than 50 rows? Split into multiple calls of 50. Act immediately after confirming.
+3. **CSV imports**: Use bulk_log_transactions (never log_transaction in a loop). Split into calls of up to 100 transactions each. For a 300-row CSV, that's 3 tool calls. Act immediately after confirming — call all the tools in one response, don't wait between batches.
 4. **Use the snapshot first.** Don't call get_finances if the data is right below. Only fetch when you need more detail.
 5. **Receipt/image OCR**: Extract line items → show a table → confirm → log.
 6. **Errors**: Be explicit. "The insert failed because [reason]. Here's what you can try." Never gloss over failures.
@@ -165,10 +165,10 @@ export async function POST(request: Request) {
       try {
         let currentMessages = [...anthropicMessages]
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 15; i++) {
           const stream = anthropic.messages.stream({
             model,
-            max_tokens: 16384,
+            max_tokens: 32768,
             ...(model === "claude-opus-4-6" ? { thinking: { type: "enabled", budget_tokens: 2000 } } : {}),
             system: systemPrompt,
             tools: toolDefinitions,
