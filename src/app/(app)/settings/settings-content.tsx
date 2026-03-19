@@ -13,7 +13,6 @@ import {
   Loader2,
   ExternalLink,
 } from "lucide-react"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -187,14 +186,9 @@ export function SettingsContent({
         {/* Asana */}
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="size-9 rounded-lg bg-[#F06A6A]/10 flex items-center justify-center shrink-0 overflow-hidden">
-                <Image src="/logos/asana_logo.png" alt="Asana" width={24} height={24} className="object-contain" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Asana</p>
-                <p className="text-xs text-muted-foreground">Sync tasks to the calendar</p>
-              </div>
+            <div>
+              <p className="font-medium text-sm">Asana</p>
+              <p className="text-xs text-muted-foreground">Sync tasks to the calendar</p>
             </div>
             {asanaConn ? (
               <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-400/50 gap-1">
@@ -238,14 +232,9 @@ export function SettingsContent({
         {/* Google Calendar */}
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="size-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-                <Image src="/logos/Google_Calendar-Logo.wine.png" alt="Google Calendar" width={30} height={30} className="object-contain" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Google Calendar</p>
-                <p className="text-xs text-muted-foreground">Sync Google Calendar events</p>
-              </div>
+            <div>
+              <p className="font-medium text-sm">Google Calendar</p>
+              <p className="text-xs text-muted-foreground">Sync Google Calendar events</p>
             </div>
             {googleConn ? (
               <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-400/50 gap-1">
