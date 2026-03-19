@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { usePlaidLink } from "react-plaid-link"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -58,23 +58,14 @@ export function PlaidConnectButton({ onSuccess }: PlaidConnectButtonProps) {
     onExit: () => setLinkToken(null),
   })
 
-  const handleClick = useCallback(async () => {
-    if (linkToken && ready) {
-      open()
-    } else {
-      await fetchLinkToken()
-    }
-  }, [linkToken, ready, open, fetchLinkToken])
-
-  // Auto-open once link token is ready
-  const handleReady = useCallback(() => {
+  // Auto-open Plaid Link once token is fetched and SDK is ready
+  useEffect(() => {
     if (linkToken && ready) open()
   }, [linkToken, ready, open])
 
-  // Trigger open when ready changes to true after token fetch
-  if (linkToken && ready) {
-    open()
-  }
+  const handleClick = useCallback(async () => {
+    await fetchLinkToken()
+  }, [fetchLinkToken])
 
   return (
     <Button onClick={handleClick} disabled={loading} variant="outline" className="gap-2">
