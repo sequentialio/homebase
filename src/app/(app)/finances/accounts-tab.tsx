@@ -265,6 +265,8 @@ export function AccountsTab({
   const sectionsRef = useRef<SectionState[]>(sections)
   sectionsRef.current = sections
 
+  const dragOriginContainer = useRef<string | null>(null)
+
   const [activeAccount, setActiveAccount] = useState<BankAccount | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
@@ -320,6 +322,7 @@ export function AccountsTab({
   }
 
   function handleDragStart({ active }: DragStartEvent) {
+    dragOriginContainer.current = findContainer(active.id as string)
     setActiveAccount(findAccountById(active.id as string))
   }
 
@@ -381,7 +384,7 @@ export function AccountsTab({
     const overId = over.id as string
 
     const current = sectionsRef.current
-    const activeContainer = findContainer(activeId)
+    const activeContainer = dragOriginContainer.current ?? findContainer(activeId)
     const overContainer = findContainer(overId)
 
     if (!activeContainer || !overContainer) return

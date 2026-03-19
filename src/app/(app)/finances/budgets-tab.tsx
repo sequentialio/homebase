@@ -338,6 +338,8 @@ export function BudgetsTab({
   sectionsRef.current = sections
   unsectionedRef.current = unsectioned
 
+  const dragOriginContainer = useRef<string>("")
+
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -379,6 +381,7 @@ export function BudgetsTab({
   }
 
   function handleDragStart(event: DragStartEvent) {
+    dragOriginContainer.current = findContainer(String(event.active.id))
     setActiveId(String(event.active.id))
   }
 
@@ -451,7 +454,7 @@ export function BudgetsTab({
     setActiveId(null)
     if (!over) return
 
-    const activeContainer = findContainer(String(active.id))
+    const activeContainer = dragOriginContainer.current || findContainer(String(active.id))
     const overContainer = findContainer(String(over.id))
     if (!activeContainer || !overContainer) return
 
@@ -483,6 +486,13 @@ export function BudgetsTab({
       } else {
         const destSec = sectionsRef.current.find((s) => s.id === overContainer)
         if (destSec) await persistPositions(overContainer, destSec.budgets)
+      }
+      // Also persist source section to close the position gap
+      if (activeContainer === "unsectioned") {
+        await persistPositions("unsectioned", unsectionedRef.current)
+      } else {
+        const srcSec = sectionsRef.current.find((s) => s.id === activeContainer)
+        if (srcSec) await persistPositions(activeContainer, srcSec.budgets)
       }
     }
   }

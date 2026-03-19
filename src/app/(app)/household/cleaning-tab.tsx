@@ -244,6 +244,7 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
   const [completing, setCompleting] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
+  const dragOriginContainer = useRef<string | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -326,6 +327,7 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
   // ── DnD handlers ──────────────────────────────────────────────────────────
 
   function handleDragStart(event: DragStartEvent) {
+    dragOriginContainer.current = findContainer(event.active.id as string)
     setActiveId(event.active.id as string)
   }
 
@@ -354,7 +356,7 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
 
     if (!over || active.id === over.id) return
 
-    const activeContainer = findContainer(active.id as string)
+    const activeContainer = dragOriginContainer.current ?? findContainer(active.id as string)
     const overContainer = findContainer(over.id as string) ?? activeContainer
 
     if (!activeContainer || !overContainer) return
@@ -395,11 +397,14 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
           return
         }
 
-        // Persist positions for destination group
+        // Persist positions for destination and source groups
         const destDuties = dutiesRef.current.filter(
           (d) => (d.room ?? DEFAULT_ROOM) === overContainer
         )
-        await persistPositions(destDuties)
+        const srcDuties = dutiesRef.current.filter(
+          (d) => (d.room ?? DEFAULT_ROOM) === activeContainer && d.id !== active.id
+        )
+        await Promise.all([persistPositions(destDuties), persistPositions(srcDuties)])
       }
 
       void updateRoom()

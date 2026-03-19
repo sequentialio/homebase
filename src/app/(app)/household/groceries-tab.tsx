@@ -295,6 +295,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const dragOriginContainer = useRef<string | null>(null)
   const [customCategories, setCustomCategories] = useState<string[]>([])
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
@@ -422,6 +423,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
   // ── DnD handlers ──────────────────────────────────────────────────────────
 
   function handleDragStart(event: DragStartEvent) {
+    dragOriginContainer.current = findContainer(event.active.id as string)
     setActiveId(event.active.id as string)
   }
 
@@ -452,7 +454,7 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
 
     if (!over || active.id === over.id) return
 
-    const activeContainer = findContainer(active.id as string)
+    const activeContainer = dragOriginContainer.current ?? findContainer(active.id as string)
     const overContainer = findContainer(over.id as string) ?? activeContainer
 
     if (!activeContainer || !overContainer) return

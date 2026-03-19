@@ -312,6 +312,8 @@ export function InvestmentsTab({ userId, initialInvestments, initialSections }: 
   sectionsRef.current = sections
   unsectionedRef.current = unsectioned
 
+  const dragOriginContainer = useRef<string>("")
+
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Investment | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -341,6 +343,7 @@ export function InvestmentsTab({ userId, initialInvestments, initialSections }: 
   }
 
   function handleDragStart(event: DragStartEvent) {
+    dragOriginContainer.current = findContainer(String(event.active.id))
     setActiveId(String(event.active.id))
   }
 
@@ -387,7 +390,7 @@ export function InvestmentsTab({ userId, initialInvestments, initialSections }: 
     const { active, over } = event
     setActiveId(null)
     if (!over) return
-    const from = findContainer(String(active.id))
+    const from = dragOriginContainer.current || findContainer(String(active.id))
     const to = findContainer(String(over.id))
     if (!from || !to) return
 
@@ -419,6 +422,13 @@ export function InvestmentsTab({ userId, initialInvestments, initialSections }: 
       } else {
         const destSec = sectionsRef.current.find((s) => s.id === to)
         if (destSec) await persistPositions(destSec.investments)
+      }
+      // Also persist source section to close the position gap
+      if (from === "unsectioned") {
+        await persistPositions(unsectionedRef.current)
+      } else {
+        const srcSec = sectionsRef.current.find((s) => s.id === from)
+        if (srcSec) await persistPositions(srcSec.investments)
       }
     }
   }
