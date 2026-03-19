@@ -49,15 +49,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 bg-white dark:bg-black">
-      <Card className="w-full max-w-sm shadow-lg border border-black/10 dark:border-white/10">
-        <CardHeader className="text-center items-center gap-3">
+    <div className="dark flex min-h-screen items-center justify-center px-4 bg-black">
+      <Card className="w-full max-w-sm shadow-lg border border-white/10">
+        <CardHeader className="text-center items-center gap-4 pb-6">
           <Image
-            src="/logos/mita_full.png"
+            src="/logos/mita_full_cropped.png"
             alt="MITA"
-            width={140}
-            height={44}
-            className="object-contain h-11 w-auto"
+            width={280}
+            height={96}
+            className="object-contain h-14 w-auto mx-auto block"
           />
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
@@ -98,7 +98,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <div className="fixed bottom-4 left-0 right-0 text-center text-xs text-black/40 dark:text-white/40 space-y-1">
+      <div className="fixed bottom-4 left-0 right-0 text-center text-xs text-white/30 space-y-1">
         <p>{APP_VERSION}</p>
         <p>{APP_CREATOR}</p>
       </div>
