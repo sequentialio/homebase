@@ -89,7 +89,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "bulk_log_transactions",
     description:
-      "Log multiple transactions at once from a CSV export or list. Use this instead of log_transaction when the user attaches a CSV file or provides more than 2 transactions.",
+      "Log multiple transactions at once from a list. Use for small batches (under 20 transactions) entered manually.",
     input_schema: {
       type: "object",
       properties: {
@@ -110,6 +110,29 @@ export const toolDefinitions: Anthropic.Tool[] = [
         },
       },
       required: ["transactions"],
+    },
+  },
+  {
+    name: "import_csv_transactions",
+    description:
+      "Import transactions directly from a CSV file attached by the user. This parses the CSV server-side — you do NOT need to extract or list the transactions yourself. Just call this tool with the filter parameters. The CSV must have columns: Date, Description, Category, Amount. Negative amounts = expense, positive = income. Use this for ANY CSV upload instead of bulk_log_transactions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        exclude_categories: {
+          type: "array",
+          items: { type: "string" },
+          description: "Categories to exclude (e.g. ['Transfer'])",
+        },
+        start_date: {
+          type: "string",
+          description: "Only import transactions on or after this date (YYYY-MM-DD). Omit for all dates.",
+        },
+        end_date: {
+          type: "string",
+          description: "Only import transactions on or before this date (YYYY-MM-DD). Omit for all dates.",
+        },
+      },
     },
   },
   {
@@ -316,7 +339,8 @@ export async function executeTool(
   name: string,
   input: Record<string, unknown>,
   supabase: SupabaseClient<Database>,
-  userId: string
+  userId: string,
+  csvContent?: string
 ): Promise<string> {
   try {
     switch (name) {
@@ -355,6 +379,9 @@ export async function executeTool(
 
       case "upsert_budget":
         return await upsertBudget(supabase, userId, input)
+
+      case "import_csv_transactions":
+        return await importCsvTransactions(supabase, userId, input, csvContent)
 
       case "save_note":
         return await saveNote(supabase, userId, input)
@@ -699,6 +726,150 @@ async function upsertBudget(
     if (error) return `Failed to add budget: ${error.message}`
     return `Budget added: ${data.category} — $${data.monthly_limit}/mo for ${data.month}/${data.year}`
   }
+}
+
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = []
+  let current = ""
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"'
+        i++
+      } else if (ch === '"') {
+        inQuotes = false
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === ",") {
+        fields.push(current.trim())
+        current = ""
+      } else {
+        current += ch
+      }
+    }
+  }
+  fields.push(current.trim())
+  return fields
+}
+
+async function importCsvTransactions(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>,
+  csvContent?: string
+): Promise<string> {
+  if (!csvContent) return "No CSV file found in the conversation. Ask the user to attach a CSV file."
+
+  const excludeCategories = new Set(
+    ((input.exclude_categories as string[]) ?? []).map((c) => c.toLowerCase())
+  )
+  const startDate = input.start_date as string | undefined
+  const endDate = input.end_date as string | undefined
+
+  // Parse CSV
+  const lines = csvContent.split("\n").filter((l) => l.trim())
+  if (lines.length < 2) return "CSV file is empty or has no data rows."
+
+  const header = parseCsvLine(lines[0].replace(/^\uFEFF/, ""))
+  const dateIdx = header.findIndex((h) => /date/i.test(h))
+  const descIdx = header.findIndex((h) => /description/i.test(h))
+  const catIdx = header.findIndex((h) => /category/i.test(h))
+  const amtIdx = header.findIndex((h) => /amount/i.test(h))
+
+  if (dateIdx === -1 || descIdx === -1 || amtIdx === -1) {
+    return `CSV missing required columns. Found: [${header.join(", ")}]. Need: Date, Description, Amount.`
+  }
+
+  // Parse MM/DD/YYYY → YYYY-MM-DD
+  function parseDate(raw: string): string | null {
+    const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (match) return `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return iso[0]
+    return null
+  }
+
+  const rows: { user_id: string; type: string; amount: number; description: string; category: string | null; date: string }[] = []
+  let skippedTransfers = 0
+  let skippedDateFilter = 0
+  let parseErrors = 0
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i])
+    if (fields.length <= amtIdx) { parseErrors++; continue }
+
+    const rawDate = fields[dateIdx]
+    const desc = fields[descIdx]
+    const category = catIdx >= 0 ? fields[catIdx] : null
+    const rawAmount = parseFloat(fields[amtIdx].replace(/[$,]/g, ""))
+
+    if (!rawDate || !desc || !Number.isFinite(rawAmount) || rawAmount === 0) { parseErrors++; continue }
+
+    // Skip excluded categories
+    if (category && excludeCategories.has(category.toLowerCase())) {
+      skippedTransfers++
+      continue
+    }
+
+    const date = parseDate(rawDate)
+    if (!date) { parseErrors++; continue }
+
+    // Date filter
+    if (startDate && date < startDate) { skippedDateFilter++; continue }
+    if (endDate && date > endDate) { skippedDateFilter++; continue }
+
+    rows.push({
+      user_id: userId,
+      type: rawAmount < 0 ? "expense" : "income",
+      amount: Math.abs(rawAmount),
+      description: desc,
+      category: category || null,
+      date,
+    })
+  }
+
+  if (rows.length === 0) {
+    return `No transactions to import after filtering. Skipped ${skippedTransfers} transfers, ${skippedDateFilter} outside date range, ${parseErrors} parse errors.`
+  }
+
+  if (rows.length > MAX_BULK_TRANSACTIONS) {
+    return `Too many transactions (${rows.length}) after filtering. Max is ${MAX_BULK_TRANSACTIONS}. Ask the user to narrow the date range.`
+  }
+
+  // Insert in batches of 100
+  let totalInserted = 0
+  const batchSize = 100
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize)
+    const { error, data } = await supabase.from("transactions").insert(batch).select()
+    if (error) return `Failed at batch ${Math.floor(i / batchSize) + 1}: ${error.message}. ${totalInserted} transactions were already saved.`
+    totalInserted += data.length
+  }
+
+  // Build summary by category
+  const byCat: Record<string, { count: number; total: number }> = {}
+  for (const r of rows) {
+    const cat = r.category || "Uncategorized"
+    if (!byCat[cat]) byCat[cat] = { count: 0, total: 0 }
+    byCat[cat].count++
+    byCat[cat].total += r.amount
+  }
+  const catSummary = Object.entries(byCat)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([cat, { count, total }]) => `${cat}: ${count} transactions, $${total.toFixed(2)}`)
+    .join("\n")
+
+  const dateRange = rows.length > 0
+    ? `${rows[rows.length - 1].date} to ${rows[0].date}`
+    : "N/A"
+
+  return `Successfully imported ${totalInserted} transactions (${dateRange}).\n\nSkipped: ${skippedTransfers} transfers, ${skippedDateFilter} outside date range, ${parseErrors} parse errors.\n\nBreakdown by category:\n${catSummary}`
 }
 
 async function saveNote(

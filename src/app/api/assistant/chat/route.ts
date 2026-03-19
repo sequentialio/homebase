@@ -123,6 +123,14 @@ export async function POST(request: Request) {
   const context = await buildContext(supabase, user.id)
   const systemPrompt = buildSystemPrompt(userName, context, notesText)
 
+  // Extract CSV content from the last user message for server-side parsing
+  const lastUserMsg = messages[messages.length - 1]
+  let csvContent: string | undefined
+  if (lastUserMsg?.content) {
+    const csvMatch = lastUserMsg.content.match(/```csv\n([\s\S]+?)```/)
+    if (csvMatch) csvContent = csvMatch[1]
+  }
+
   // Convert incoming messages to Anthropic format
   const anthropicMessages: Anthropic.MessageParam[] = messages.map((msg) => {
     if (msg.role === "user" && msg.images?.length) {
@@ -250,7 +258,7 @@ export async function POST(request: Request) {
                 })
                 continue
               }
-              const result = await executeTool(tc.name, input, supabase, user.id)
+              const result = await executeTool(tc.name, input, supabase, user.id, csvContent)
               const isError = result.startsWith("Error") || result.startsWith("Failed") || result.startsWith("Invalid")
               send({ type: "tool_done", name: tc.name, error: isError ? result : undefined })
               toolResults.push({
