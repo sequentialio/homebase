@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import {
   Plus, Pencil, Trash2, CreditCard, GripVertical,
   ChevronDown, ChevronRight, MoreHorizontal, FolderPlus,
+  CalendarDays, CalendarRange, Repeat2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -328,6 +329,38 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
     return allDebts.reduce((sum, d) => sum + Number(d.balance), 0)
   }, [sections, unsectioned])
 
+  // ── Payment summary widget ──────────────────────────────────────────────────
+  const [paymentFilter, setPaymentFilter] = useState<string>("all")
+
+  // Load from localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
+    const stored = localStorage.getItem("debt_payment_filter")
+    if (stored) setPaymentFilter(stored)
+  }, [])
+
+  function savePaymentFilter(val: string) {
+    setPaymentFilter(val)
+    localStorage.setItem("debt_payment_filter", val)
+  }
+
+  const paymentSummary = useMemo(() => {
+    let debts: Debt[]
+    if (paymentFilter === "all") {
+      debts = [...sections.flatMap((s) => s.debts), ...unsectioned]
+    } else if (paymentFilter === "unsectioned") {
+      debts = unsectioned
+    } else {
+      debts = sections.find((s) => s.id === paymentFilter)?.debts ?? []
+    }
+    const monthly = debts.reduce((sum, d) => sum + Number(d.min_payment ?? 0), 0)
+    return {
+      daily: monthly / 30.44,
+      monthly,
+      yearly: monthly * 12,
+      debtCount: debts.filter((d) => Number(d.min_payment ?? 0) > 0).length,
+    }
+  }, [paymentFilter, sections, unsectioned])
+
   function findContainer(id: string): string {
     for (const sec of sectionsRef.current) {
       if (sec.id === id) return id
@@ -612,6 +645,51 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
             <Plus className="size-4 mr-1" /> Add Debt
           </Button>
         </div>
+      </div>
+
+      {/* Payment summary widget */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Payment Burden
+          </p>
+          <Select value={paymentFilter} onValueChange={savePaymentFilter}>
+            <SelectTrigger className="h-7 text-xs w-40">
+              <SelectValue placeholder="All sections" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sections</SelectItem>
+              {sections.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+              {unsectioned.length > 0 && (
+                <SelectItem value="unsectioned">No section</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Daily", value: paymentSummary.daily, icon: CalendarDays },
+            { label: "Monthly", value: paymentSummary.monthly, icon: CalendarRange },
+            { label: "Yearly", value: paymentSummary.yearly, icon: Repeat2 },
+          ].map(({ label, value, icon: Icon }) => (
+            <div key={label} className="rounded-md bg-muted/40 p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Icon className="size-3.5" />
+                <span className="text-xs">{label}</span>
+              </div>
+              <p className="text-base font-bold text-destructive leading-tight">
+                {formatCurrency(value)}
+              </p>
+            </div>
+          ))}
+        </div>
+        {paymentSummary.debtCount === 0 && (
+          <p className="text-xs text-muted-foreground text-center">
+            No minimum payments set — edit debts to add monthly payments
+          </p>
+        )}
       </div>
 
       {/* DnD context */}
