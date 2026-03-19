@@ -104,7 +104,7 @@ export async function POST(request: Request) {
           const stream = anthropic.messages.stream({
             model,
             max_tokens: 4096,
-            thinking: { type: "adaptive" },
+            ...(model === "claude-opus-4-6" ? { thinking: { type: "enabled", budget_tokens: 2000 } } : {}),
             system: systemPrompt,
             tools: toolDefinitions,
             messages: currentMessages,
