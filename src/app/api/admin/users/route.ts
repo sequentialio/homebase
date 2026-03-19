@@ -21,7 +21,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data: callerProfile } = await supabase
+  // Verify role via admin client (bypasses RLS — reads actual DB value)
+  const adminClient = createAdminClient()
+  const { data: callerProfile } = await adminClient
     .from("profiles")
     .select("role")
     .eq("id", user.id)
@@ -68,13 +70,15 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const adminClient = createAdminClient()
-
     // Build update payload — only include fields that were provided
     const updates: Record<string, unknown> = {}
     if (role !== undefined) updates.role = role
     if (office_id !== undefined) updates.office_id = office_id || null
     if (is_active !== undefined) updates.is_active = is_active
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 })
+    }
 
     const { error: updateError } = await adminClient
       .from("profiles")
@@ -82,7 +86,7 @@ export async function PATCH(request: Request) {
       .eq("id", user_id)
 
     if (updateError) {
-      console.error("User update error:", updateError.message)
+      console.error("[admin/users] Update error:", updateError.message)
       return NextResponse.json(
         { error: "Failed to update user" },
         { status: 400 }
@@ -91,8 +95,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("User update error:", error)
-    const message = "Failed to update user"
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error("[admin/users] Error:", error instanceof Error ? error.message : error)
+    return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
   }
 }

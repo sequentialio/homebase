@@ -238,6 +238,8 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
       images: m.images?.map((img) => ({ data: img.data, mediaType: img.mediaType })),
     }))
 
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
@@ -260,12 +262,13 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
             finalMessages = updated
             return updated
           })
+          try { res.body?.getReader().cancel() } catch { /* ignore */ }
           return
         }
         throw new Error(err.error ?? "Request failed")
       }
 
-      const reader = res.body!.getReader()
+      reader = res.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
 
@@ -357,6 +360,7 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
         return updated
       })
     } finally {
+      try { reader?.cancel() } catch { /* ignore */ }
       setIsStreaming(false)
       setActiveTools([])
       await saveSession(finalMessages)
