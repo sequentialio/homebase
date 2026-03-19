@@ -31,6 +31,8 @@ export interface Message {
   images?: ImageAttachment[]
   imageCount?: number
   toolCalls?: string[]
+  thinking?: string
+  streamingThinking?: boolean
   streaming?: boolean
 }
 
@@ -256,7 +258,33 @@ export function AssistantProvider({ userId, children }: AssistantProviderProps) 
           if (!line) continue
           try {
             const event = JSON.parse(line)
-            if (event.type === "delta") {
+            if (event.type === "thinking_start") {
+              setMessages((prev) => {
+                const updated = prev.map((m) =>
+                  m.id === assistantMsg.id ? { ...m, streamingThinking: true } : m
+                )
+                finalMessages = updated
+                return updated
+              })
+            } else if (event.type === "thinking_delta") {
+              setMessages((prev) => {
+                const updated = prev.map((m) =>
+                  m.id === assistantMsg.id
+                    ? { ...m, thinking: (m.thinking ?? "") + event.text }
+                    : m
+                )
+                finalMessages = updated
+                return updated
+              })
+            } else if (event.type === "thinking_done") {
+              setMessages((prev) => {
+                const updated = prev.map((m) =>
+                  m.id === assistantMsg.id ? { ...m, streamingThinking: false } : m
+                )
+                finalMessages = updated
+                return updated
+              })
+            } else if (event.type === "delta") {
               setMessages((prev) => {
                 const updated = prev.map((m) =>
                   m.id === assistantMsg.id ? { ...m, content: m.content + event.text } : m

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import {
   ArrowUp, Paperclip, X, User, Loader2, Zap,
-  Plus, Menu, PanelRightClose, PanelRightOpen, FileText,
+  Plus, Menu, PanelRightClose, PanelRightOpen, FileText, ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -337,6 +337,40 @@ export function AssistantContent({ userName }: AssistantContentProps) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: boolean }) {
+  const [open, setOpen] = useState(true)
+
+  // Auto-collapse once streaming finishes
+  useEffect(() => {
+    if (!streaming && thinking) setOpen(false)
+  }, [streaming, thinking])
+
+  return (
+    <div className="mb-1 rounded-lg border border-border/50 bg-muted/30 overflow-hidden text-xs">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {streaming ? (
+          <Loader2 className="size-3 animate-spin shrink-0 text-[var(--brand-lime)]" />
+        ) : (
+          <Zap className="size-3 shrink-0 text-[var(--brand-lime)]" />
+        )}
+        <span className="font-medium">{streaming ? "Thinking…" : "Thought"}</span>
+        <ChevronDown className={cn("size-3 ml-auto transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 text-muted-foreground leading-relaxed whitespace-pre-wrap border-t border-border/30 pt-2 max-h-64 overflow-y-auto">
+          {thinking}
+          {streaming && (
+            <span className="inline-block w-0.5 h-3 bg-current ml-0.5 animate-pulse align-middle" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user"
 
@@ -372,6 +406,13 @@ function MessageBubble({ message }: { message: Message }) {
             <Paperclip className="size-3" />
             {message.imageCount} image{message.imageCount! > 1 ? "s" : ""} attached
           </div>
+        )}
+
+        {!isUser && (message.thinking || message.streamingThinking) && (
+          <ThinkingBlock
+            thinking={message.thinking ?? ""}
+            streaming={message.streamingThinking}
+          />
         )}
 
         {(message.content || message.streaming) && (

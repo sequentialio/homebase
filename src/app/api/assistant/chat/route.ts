@@ -112,9 +112,24 @@ export async function POST(request: Request) {
           let activeId = ""
           let activeName = ""
           let activeJson = ""
+          let isThinkingBlock = false
 
           for await (const event of stream) {
             if (
+              event.type === "content_block_start" &&
+              event.content_block.type === "thinking"
+            ) {
+              isThinkingBlock = true
+              send({ type: "thinking_start" })
+            } else if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "thinking_delta"
+            ) {
+              send({ type: "thinking_delta", text: event.delta.thinking })
+            } else if (event.type === "content_block_stop" && isThinkingBlock) {
+              isThinkingBlock = false
+              send({ type: "thinking_done" })
+            } else if (
               event.type === "content_block_start" &&
               event.content_block.type === "tool_use"
             ) {
