@@ -115,10 +115,12 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeTools, setActiveTools] = useState<string[]>([])
   const abortRef = useRef<AbortController | null>(null)
-  const [model, setModelState] = useState<AssistantModel>(() => {
-    if (typeof window === "undefined") return "claude-sonnet-4-5"
-    return (localStorage.getItem("assistant_model") as AssistantModel) ?? "claude-sonnet-4-5"
-  })
+  const [model, setModelState] = useState<AssistantModel>("claude-sonnet-4-5")
+
+  useEffect(() => {
+    const stored = localStorage.getItem("assistant_model") as AssistantModel | null
+    if (stored) setModelState(stored)
+  }, [])
 
   const setModel = useCallback((m: AssistantModel) => {
     setModelState(m)
