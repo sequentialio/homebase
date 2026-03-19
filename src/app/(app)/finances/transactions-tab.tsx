@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -115,7 +115,11 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
     })
   }, [transactions, filterMonth, filterYear, filterScope, filterAccount])
 
-  const [tiles, setTiles] = useState<TileConfig[]>(loadTiles)
+  const [tiles, setTiles] = useState<TileConfig[]>(DEFAULT_TILES)
+
+  useEffect(() => {
+    setTiles(loadTiles())
+  }, [])
 
   function saveTiles(next: TileConfig[]) {
     setTiles(next)
