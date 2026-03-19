@@ -12,15 +12,25 @@ import {
   XCircle,
   Loader2,
   ExternalLink,
+  RefreshCw,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { PlaidConnectButton } from "@/components/plaid/plaid-connect-button"
 import type { Tables } from "@/types/database"
 
 
 type Profile = Tables<"profiles">
+
+interface PlaidItem {
+  id: string
+  institution_name: string | null
+  last_synced_at: string | null
+  created_at: string
+}
 
 interface AsanaConnection {
   workspace_name: string | null
@@ -39,6 +49,7 @@ interface SettingsContentProps {
   profile: Profile | null
   asanaConnection: AsanaConnection | null
   googleConnection: GoogleConnection | null
+  plaidItems: PlaidItem[]
 }
 
 const profileSchema = z.object({
@@ -52,14 +63,18 @@ export function SettingsContent({
   profile,
   asanaConnection,
   googleConnection,
+  plaidItems: initialPlaidItems,
 }: SettingsContentProps) {
   const supabase = useMemo(() => createClient(), [])
   const searchParams = useSearchParams()
 
   const [asanaConn, setAsanaConn] = useState<AsanaConnection | null>(asanaConnection)
   const [googleConn, setGoogleConn] = useState<GoogleConnection | null>(googleConnection)
+  const [plaidItems, setPlaidItems] = useState<PlaidItem[]>(initialPlaidItems)
   const [disconnectingAsana, setDisconnectingAsana] = useState(false)
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false)
+  const [syncingPlaid, setSyncingPlaid] = useState(false)
+  const [disconnectingPlaid, setDisconnectingPlaid] = useState<string | null>(null)
 
   // Show toast based on OAuth redirect params
   useEffect(() => {
@@ -139,6 +154,37 @@ export function SettingsContent({
       toast.error("Failed to disconnect Google Calendar")
     }
     setDisconnectingGoogle(false)
+  }
+
+  async function handlePlaidSync() {
+    setSyncingPlaid(true)
+    const res = await fetch("/api/plaid/sync", { method: "POST" })
+    const data = await res.json()
+    if (res.ok) {
+      toast.success(`Synced ${data.synced} bank${data.synced !== 1 ? "s" : ""} — ${data.added} new transaction${data.added !== 1 ? "s" : ""}`)
+      // Refresh items to show updated last_synced_at
+      const { data: items } = await (supabase as any).from("plaid_items").select("id, institution_name, last_synced_at, created_at").order("created_at")
+      if (items) setPlaidItems(items as PlaidItem[])
+    } else {
+      toast.error("Sync failed")
+    }
+    setSyncingPlaid(false)
+  }
+
+  async function handlePlaidDisconnect(itemId: string) {
+    setDisconnectingPlaid(itemId)
+    const res = await fetch("/api/plaid/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: itemId }),
+    })
+    if (res.ok) {
+      setPlaidItems((prev) => prev.filter((i) => i.id !== itemId))
+      toast.success("Bank disconnected")
+    } else {
+      toast.error("Failed to disconnect bank")
+    }
+    setDisconnectingPlaid(null)
   }
 
   return (
@@ -224,6 +270,63 @@ export function SettingsContent({
                 <a href="/api/asana/connect">
                   <ExternalLink className="size-3.5 mr-1.5" /> Connect Asana
                 </a>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Connected Banks (Plaid) */}
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Connected Banks</p>
+              <p className="text-xs text-muted-foreground">Auto-sync transactions daily via Plaid</p>
+            </div>
+            {plaidItems.length > 0 && (
+              <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-400/50 gap-1">
+                <CheckCircle2 className="size-3" /> {plaidItems.length} connected
+              </Badge>
+            )}
+          </div>
+
+          {plaidItems.length > 0 && (
+            <div className="space-y-2">
+              {plaidItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">{item.institution_name ?? "Unknown Bank"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.last_synced_at
+                        ? `Last synced ${new Date(item.last_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                        : "Never synced"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="!size-7 !min-h-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => handlePlaidDisconnect(item.id)}
+                    disabled={disconnectingPlaid === item.id}
+                    title="Disconnect"
+                  >
+                    {disconnectingPlaid === item.id
+                      ? <Loader2 className="size-3.5 animate-spin" />
+                      : <Trash2 className="size-3.5" />}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 flex-wrap">
+            <PlaidConnectButton onSuccess={async () => {
+              const { data } = await (supabase as any).from("plaid_items").select("id, institution_name, last_synced_at, created_at").order("created_at")
+              if (data) setPlaidItems(data as PlaidItem[])
+            }} />
+            {plaidItems.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handlePlaidSync} disabled={syncingPlaid} className="gap-2">
+                {syncingPlaid ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                Sync Now
               </Button>
             )}
           </div>

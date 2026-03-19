@@ -3,7 +3,7 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   turbopack: {},
   // Required for @anthropic-ai/sdk (Node.js crypto/stream modules)
-  serverExternalPackages: ["@anthropic-ai/sdk"],
+  serverExternalPackages: ["@anthropic-ai/sdk", "plaid"],
   async headers() {
     return [
       {
@@ -23,7 +23,8 @@ const nextConfig: NextConfig = {
               // Add your CDN/storage domains to img-src as needed
               "img-src 'self' data: blob: https://*.supabase.co",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.plaid.com",
+              "frame-src 'self' https://*.plaid.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
