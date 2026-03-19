@@ -353,10 +353,17 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
       debts = sections.find((s) => s.id === paymentFilter)?.debts ?? []
     }
     const monthly = debts.reduce((sum, d) => sum + Number(d.min_payment ?? 0), 0)
+    const yearlyInterest = debts.reduce((sum, d) => {
+      const rate = Number(d.interest_rate ?? 0) / 100
+      return sum + Number(d.balance) * rate
+    }, 0)
     return {
       daily: monthly / 30.44,
       monthly,
       yearly: monthly * 12,
+      interestDaily: yearlyInterest / 365,
+      interestMonthly: yearlyInterest / 12,
+      interestYearly: yearlyInterest,
       debtCount: debts.filter((d) => Number(d.min_payment ?? 0) > 0).length,
     }
   }, [paymentFilter, sections, unsectioned])
@@ -668,28 +675,49 @@ export function DebtsTab({ userId, initialDebts, initialSections }: DebtsTabProp
             </SelectContent>
           </Select>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Daily", value: paymentSummary.daily, icon: CalendarDays },
-            { label: "Monthly", value: paymentSummary.monthly, icon: CalendarRange },
-            { label: "Yearly", value: paymentSummary.yearly, icon: Repeat2 },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="rounded-md bg-muted/40 p-3 space-y-1">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Icon className="size-3.5" />
-                <span className="text-xs">{label}</span>
+        {/* Min payments row */}
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1.5">Min payments</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Daily", value: paymentSummary.daily, icon: CalendarDays },
+              { label: "Monthly", value: paymentSummary.monthly, icon: CalendarRange },
+              { label: "Yearly", value: paymentSummary.yearly, icon: Repeat2 },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="rounded-md bg-muted/40 p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Icon className="size-3.5" />
+                  <span className="text-xs">{label}</span>
+                </div>
+                <p className="text-base font-bold text-destructive leading-tight">
+                  {formatCurrency(value)}
+                </p>
               </div>
-              <p className="text-base font-bold text-destructive leading-tight">
-                {formatCurrency(value)}
-              </p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-        {paymentSummary.debtCount === 0 && (
-          <p className="text-xs text-muted-foreground text-center">
-            No minimum payments set — edit debts to add monthly payments
-          </p>
-        )}
+
+        {/* Interest accrual row */}
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1.5">Interest accruing</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Daily", value: paymentSummary.interestDaily, icon: CalendarDays },
+              { label: "Monthly", value: paymentSummary.interestMonthly, icon: CalendarRange },
+              { label: "Yearly", value: paymentSummary.interestYearly, icon: Repeat2 },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="rounded-md bg-muted/40 p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Icon className="size-3.5" />
+                  <span className="text-xs">{label}</span>
+                </div>
+                <p className="text-base font-bold text-orange-500 leading-tight">
+                  {formatCurrency(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* DnD context */}
