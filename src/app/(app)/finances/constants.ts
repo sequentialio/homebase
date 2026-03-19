@@ -49,6 +49,9 @@ export const EXPENSE_FREQUENCIES = [
   "annually",
 ] as const
 
+export const ENGAGEMENT_STATUSES = ["active", "completed", "paid"] as const
+export const DEFAULT_TAX_RATE = 0.30
+
 export const INSURANCE_TYPES = [
   "Health",
   "Dental",

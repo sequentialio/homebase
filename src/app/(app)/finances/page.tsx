@@ -24,6 +24,7 @@ export default async function FinancesPage() {
     { data: taxSections },
     { data: investments },
     { data: investmentSections },
+    { data: engagements },
   ] = await Promise.all([
     supabase
       .from("transactions")
@@ -44,6 +45,7 @@ export default async function FinancesPage() {
     supabase.from("tax_sections").select("*").eq("user_id", user.id).order("position"),
     supabase.from("investments").select("*").eq("user_id", user.id).order("section_id").order("position"),
     supabase.from("investment_sections").select("*").eq("user_id", user.id).order("position"),
+    supabase.from("business_engagements").select("*").eq("user_id", user.id).order("date", { ascending: false }),
   ])
 
   return (
@@ -64,6 +66,7 @@ export default async function FinancesPage() {
       initialTaxSections={taxSections ?? []}
       initialInvestments={investments ?? []}
       initialInvestmentSections={investmentSections ?? []}
+      initialEngagements={engagements ?? []}
     />
   )
 }

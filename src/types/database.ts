@@ -121,6 +121,44 @@ export type Database = {
           },
         ]
       }
+      business_engagements: {
+        Row: {
+          id: string
+          user_id: string
+          client: string
+          description: string | null
+          date: string
+          amount: number
+          tax_rate: number
+          taxes_owed: number | null
+          revenue: number | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          client: string
+          description?: string | null
+          date: string
+          amount?: number
+          tax_rate?: number
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          client?: string
+          description?: string | null
+          date?: string
+          amount?: number
+          tax_rate?: number
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       budget_sections: {
         Row: {
           created_at: string | null

@@ -27,6 +27,7 @@ type TaxItem = Tables<"tax_items">
 type TaxSection = Tables<"tax_sections">
 type Investment = Tables<"investments">
 type InvestmentSection = Tables<"investment_sections">
+type BusinessEngagement = Tables<"business_engagements">
 
 interface FinancesContentProps {
   userId: string
@@ -45,6 +46,7 @@ interface FinancesContentProps {
   initialTaxSections: TaxSection[]
   initialInvestments: Investment[]
   initialInvestmentSections: InvestmentSection[]
+  initialEngagements: BusinessEngagement[]
 }
 
 export function FinancesContent({
@@ -64,6 +66,7 @@ export function FinancesContent({
   initialTaxSections,
   initialInvestments,
   initialInvestmentSections,
+  initialEngagements,
 }: FinancesContentProps) {
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -121,7 +124,7 @@ export function FinancesContent({
         </TabsContent>
 
         <TabsContent value="income" className="mt-4">
-          <IncomeTab userId={userId} initialIncomeSources={initialIncomeSources} />
+          <IncomeTab userId={userId} initialIncomeSources={initialIncomeSources} initialEngagements={initialEngagements} />
         </TabsContent>
 
         <TabsContent value="insurance" className="mt-4">

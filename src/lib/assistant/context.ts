@@ -33,6 +33,7 @@ export async function buildContext(
     insuranceRes,
     recurringRes,
     taxRes,
+    engagementsRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
@@ -86,6 +87,11 @@ export async function buildContext(
       .from("tax_items")
       .select("name, amount, type, tax_year, filed, due_date")
       .eq("tax_year", year),
+    supabase
+      .from("business_engagements")
+      .select("client, date, amount, taxes_owed, revenue, status")
+      .order("date", { ascending: false })
+      .limit(20),
   ])
 
   const lines: string[] = [
@@ -117,6 +123,18 @@ export async function buildContext(
     lines.push("## Active Income")
     for (const i of incomeRes.data) {
       lines.push(`- ${i.name}: $${i.amount.toFixed(2)} (${i.frequency})`)
+    }
+    lines.push("")
+  }
+
+  // Business engagements
+  if (engagementsRes.data?.length) {
+    lines.push("## Business Engagements")
+    for (const e of engagementsRes.data) {
+      const taxes = e.taxes_owed != null ? `taxes: $${Number(e.taxes_owed).toFixed(2)}` : ""
+      const rev = e.revenue != null ? `revenue: $${Number(e.revenue).toFixed(2)}` : ""
+      const details = [taxes, rev].filter(Boolean).join(", ")
+      lines.push(`- ${e.client} (${e.date}): $${Number(e.amount).toFixed(2)} [${e.status}]${details ? ` (${details})` : ""}`)
     }
     lines.push("")
   }

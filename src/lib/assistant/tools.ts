@@ -306,6 +306,24 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "upsert_business_engagement",
+    description:
+      "Add or update a business client engagement for Sequential Analytics. Use when the user mentions consulting clients, projects, or business income.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing engagement ID to update (omit to create new)" },
+        client: { type: "string", description: "Client/company name" },
+        description: { type: "string", description: "Brief description of the engagement" },
+        date: { type: "string", description: "Engagement date (YYYY-MM-DD)" },
+        amount: { type: "number", description: "Total billed amount in dollars" },
+        tax_rate: { type: "number", description: "Tax rate as decimal (default 0.30 = 30%). User may say percentage — convert to decimal." },
+        status: { type: "string", enum: ["active", "completed", "paid"], description: "Engagement status" },
+      },
+      required: ["client", "amount", "date"],
+    },
+  },
+  {
     name: "save_note",
     description:
       "Save a note to persistent memory that will be available in all future conversations. Use this proactively to remember user preferences, patterns, goals, or anything useful. If a note with the same key exists, it will be updated.",
@@ -432,6 +450,9 @@ export async function executeTool(
       case "import_csv_transactions":
         return await importCsvTransactions(supabase, userId, input, csvContent)
 
+      case "upsert_business_engagement":
+        return await upsertBusinessEngagement(supabase, userId, input)
+
       case "save_note":
         return await saveNote(supabase, userId, input)
 
@@ -460,7 +481,7 @@ async function getFinances(
     .toISOString()
     .split("T")[0]
 
-  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes] =
+  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes, engagementsRes] =
     await Promise.all([
       supabase.from("bank_accounts").select("*"),
       supabase
@@ -474,6 +495,7 @@ async function getFinances(
       supabase.from("investments").select("*").order("name"),
       supabase.from("recurring_expenses").select("*").eq("active", true).order("position"),
       supabase.from("expense_sections").select("*").order("position"),
+      supabase.from("business_engagements").select("*").order("date", { ascending: false }),
     ])
 
   return JSON.stringify({
@@ -485,6 +507,7 @@ async function getFinances(
     investments: investmentsRes.data ?? [],
     recurring_expenses: recurringRes.data ?? [],
     expense_sections: expSectionsRes.data ?? [],
+    business_engagements: engagementsRes.data ?? [],
     period_days: days,
   })
 }
@@ -818,6 +841,34 @@ async function upsertRecurringExpense(
     const { error, data } = await supabase.from("recurring_expenses").insert({ ...payload, position: count ?? 0 }).select().single()
     if (error) return `Failed to add recurring expense: ${error.message}`
     return `Recurring expense added: "${(data as Record<string,unknown>).name}" — $${(data as Record<string,unknown>).amount} ${(data as Record<string,unknown>).frequency}`
+  }
+}
+
+async function upsertBusinessEngagement(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const id = input.id as string | undefined
+  const payload = {
+    user_id: userId,
+    client: input.client as string,
+    description: (input.description as string) ?? null,
+    date: input.date as string,
+    amount: Number(input.amount),
+    tax_rate: input.tax_rate != null ? Number(input.tax_rate) : 0.30,
+    status: (input.status as string) ?? "active",
+  }
+  if (id) {
+    const { error, data } = await supabase.from("business_engagements").update(payload as never).eq("id", id).select().single()
+    if (error) return `Failed to update engagement: ${error.message}`
+    const d = data as Record<string, unknown>
+    return `Engagement updated: "${d.client}" — $${d.amount} (taxes: $${d.taxes_owed}, revenue: $${d.revenue})`
+  } else {
+    const { error, data } = await supabase.from("business_engagements").insert(payload as never).select().single()
+    if (error) return `Failed to add engagement: ${error.message}`
+    const d = data as Record<string, unknown>
+    return `Engagement added: "${d.client}" — $${d.amount} (taxes: $${d.taxes_owed}, revenue: $${d.revenue})`
   }
 }
 
