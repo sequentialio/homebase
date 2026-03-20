@@ -64,3 +64,29 @@ export const INSURANCE_TYPES = [
   "Pet",
   "Other",
 ] as const
+
+export const CREDIT_ACCOUNT_TYPES = [
+  "credit_card",
+  "student_loan",
+  "personal_loan",
+  "auto_loan",
+  "mortgage",
+  "other",
+] as const
+
+export const CREDIT_ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  credit_card: "Credit Card",
+  student_loan: "Student Loan",
+  personal_loan: "Personal Loan",
+  auto_loan: "Auto Loan",
+  mortgage: "Mortgage",
+  other: "Other",
+}
+
+export const RATING_COLORS: Record<string, string> = {
+  Excellent: "text-green-500 bg-green-500/10 border-green-500/30",
+  Good: "text-lime-500 bg-lime-500/10 border-lime-500/30",
+  Fair: "text-yellow-500 bg-yellow-500/10 border-yellow-500/30",
+  "Needs work": "text-orange-500 bg-orange-500/10 border-orange-500/30",
+  Poor: "text-red-500 bg-red-500/10 border-red-500/30",
+}

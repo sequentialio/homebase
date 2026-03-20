@@ -37,13 +37,14 @@ import {
 } from "@/components/ui/table"
 import type { Tables } from "@/types/database"
 
-type Engagement = Tables<"business_engagements">
+type Engagement = Tables<"business_engagements"> & { deductions?: number | null }
 
 const engagementSchema = z.object({
   client: z.string().min(1, "Client is required"),
   description: z.string().optional(),
   date: z.string().min(1, "Date is required"),
   amount: z.number().positive("Amount must be > 0"),
+  deductions: z.number().min(0).nullable(),
   tax_rate_pct: z.number().min(0).max(100),
   status: z.enum(["active", "completed", "paid"]),
 })
@@ -81,6 +82,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
   }, [engagements, filterStatus])
 
   const totalBilled = engagements.reduce((s, e) => s + Number(e.amount), 0)
+  const totalDeductions = engagements.reduce((s, e) => s + Number(e.deductions ?? 0), 0)
   const totalTaxes = engagements.reduce((s, e) => s + Number(e.taxes_owed ?? 0), 0)
   const netRevenue = engagements.reduce((s, e) => s + Number(e.revenue ?? 0), 0)
   const activeCount = engagements.filter((e) => e.status === "active").length
@@ -92,6 +94,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
       description: "",
       date: new Date().toISOString().split("T")[0],
       amount: 0,
+      deductions: null,
       tax_rate_pct: DEFAULT_TAX_RATE * 100,
       status: "active",
     },
@@ -108,6 +111,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
       description: "",
       date: new Date().toISOString().split("T")[0],
       amount: 0,
+      deductions: null,
       tax_rate_pct: DEFAULT_TAX_RATE * 100,
       status: "active",
     })
@@ -121,6 +125,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
       description: e.description ?? "",
       date: e.date,
       amount: Number(e.amount),
+      deductions: e.deductions != null ? Number(e.deductions) : null,
       tax_rate_pct: Number(e.tax_rate) * 100,
       status: e.status as FormValues["status"],
     })
@@ -135,6 +140,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
       description: values.description || null,
       date: values.date,
       amount: values.amount,
+      deductions: values.deductions || null,
       tax_rate: values.tax_rate_pct / 100,
       status: values.status,
     }
@@ -179,6 +185,12 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
           <p className="text-xs text-muted-foreground">Total Billed</p>
           <p className="font-semibold text-lg">{formatCurrency(totalBilled)}</p>
         </div>
+        {totalDeductions > 0 && (
+          <div className="rounded-lg border p-3 flex-1 min-w-[140px]">
+            <p className="text-xs text-muted-foreground">Deductions</p>
+            <p className="font-semibold text-lg text-orange-500">{formatCurrency(totalDeductions)}</p>
+          </div>
+        )}
         <div className="rounded-lg border p-3 flex-1 min-w-[140px]">
           <p className="text-xs text-muted-foreground">Total Taxes</p>
           <p className="font-semibold text-lg text-red-600 dark:text-red-400">{formatCurrency(totalTaxes)}</p>
@@ -224,6 +236,7 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
                 <TableHead>Client</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead className="hidden sm:table-cell">Deductions</TableHead>
                 <TableHead className="hidden sm:table-cell">Tax Rate</TableHead>
                 <TableHead className="hidden sm:table-cell">Taxes</TableHead>
                 <TableHead className="hidden md:table-cell">Revenue</TableHead>
@@ -242,6 +255,9 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
                   </TableCell>
                   <TableCell className="text-sm font-medium whitespace-nowrap">
                     {formatCurrency(Number(e.amount))}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-sm text-orange-500 whitespace-nowrap">
+                    {e.deductions ? formatCurrency(Number(e.deductions)) : <span className="text-muted-foreground/50">—</span>}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                     {(Number(e.tax_rate) * 100).toFixed(0)}%
@@ -314,6 +330,17 @@ export function BusinessTab({ userId, initialEngagements }: BusinessTabProps) {
                   <p className="text-xs text-destructive">{form.formState.errors.amount.message}</p>
                 )}
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Deductions / Expenses ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Business expenses (optional)"
+                value={form.watch("deductions") ?? ""}
+                onChange={(e) => form.setValue("deductions", e.target.value ? Number(e.target.value) : null)}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

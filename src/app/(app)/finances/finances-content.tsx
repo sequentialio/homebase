@@ -11,6 +11,7 @@ import { IncomeTab } from "./income-tab"
 import { InsuranceTab } from "./insurance-tab"
 import { TaxesTab } from "./taxes-tab"
 import { InvestmentsTab } from "./investments-tab"
+import { CreditsTab } from "./credits-tab"
 
 type Transaction = Tables<"transactions">
 type BankAccount = Tables<"bank_accounts">
@@ -23,11 +24,47 @@ type AccountSection = Tables<"account_sections">
 type BudgetSection = Tables<"budget_sections">
 type DebtSection = Tables<"debt_sections">
 type ExpenseSection = Tables<"expense_sections">
-type TaxItem = Tables<"tax_items">
+type TaxItem = Tables<"tax_items"> & { form_source?: string | null; category?: string | null }
 type TaxSection = Tables<"tax_sections">
 type Investment = Tables<"investments">
 type InvestmentSection = Tables<"investment_sections">
 type BusinessEngagement = Tables<"business_engagements">
+
+type CreditAccount = {
+  id: string
+  user_id: string
+  name: string
+  type: string
+  balance: number
+  credit_limit: number | null
+  opened_date: string | null
+  status: string
+  lender: string | null
+  notes: string | null
+  created_at: string
+}
+
+type CreditProfile = {
+  id: string
+  user_id: string
+  score: number | null
+  score_source: string | null
+  payment_history_pct: number | null
+  payment_history_rating: string | null
+  credit_card_use_pct: number | null
+  credit_card_use_rating: string | null
+  derogatory_marks: number | null
+  derogatory_marks_rating: string | null
+  credit_age_years: number | null
+  credit_age_months: number | null
+  credit_age_rating: string | null
+  total_accounts: number | null
+  total_accounts_rating: string | null
+  hard_inquiries: number | null
+  hard_inquiries_rating: string | null
+  last_updated: string | null
+  created_at: string
+}
 
 interface FinancesContentProps {
   userId: string
@@ -47,6 +84,8 @@ interface FinancesContentProps {
   initialInvestments: Investment[]
   initialInvestmentSections: InvestmentSection[]
   initialEngagements: BusinessEngagement[]
+  initialCreditAccounts: CreditAccount[]
+  initialCreditProfile: CreditProfile | null
 }
 
 export function FinancesContent({
@@ -67,6 +106,8 @@ export function FinancesContent({
   initialInvestments,
   initialInvestmentSections,
   initialEngagements,
+  initialCreditAccounts,
+  initialCreditProfile,
 }: FinancesContentProps) {
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -83,6 +124,7 @@ export function FinancesContent({
           <TabsTrigger value="insurance">Insurance</TabsTrigger>
           <TabsTrigger value="taxes">Taxes</TabsTrigger>
           <TabsTrigger value="investments">Investments</TabsTrigger>
+          <TabsTrigger value="credits">Credit</TabsTrigger>
         </TabsList>
 
         <TabsContent value="transactions" className="mt-4">
@@ -132,7 +174,7 @@ export function FinancesContent({
         </TabsContent>
 
         <TabsContent value="taxes" className="mt-4">
-          <TaxesTab userId={userId} initialItems={initialTaxItems} initialSections={initialTaxSections} />
+          <TaxesTab userId={userId} initialItems={initialTaxItems as any} initialSections={initialTaxSections} />
         </TabsContent>
 
         <TabsContent value="investments" className="mt-4">
@@ -140,6 +182,14 @@ export function FinancesContent({
             userId={userId}
             initialInvestments={initialInvestments}
             initialSections={initialInvestmentSections}
+          />
+        </TabsContent>
+
+        <TabsContent value="credits" className="mt-4">
+          <CreditsTab
+            userId={userId}
+            initialAccounts={initialCreditAccounts}
+            initialProfile={initialCreditProfile}
           />
         </TabsContent>
       </Tabs>

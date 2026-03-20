@@ -34,6 +34,10 @@ export async function buildContext(
     recurringRes,
     taxRes,
     engagementsRes,
+    creditAccountsRes,
+    creditProfileRes,
+    freshnessRes,
+    knowledgeRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
@@ -83,21 +87,50 @@ export async function buildContext(
       .from("recurring_expenses")
       .select("name, amount, category, frequency, billing_day, auto_pay, active")
       .eq("active", true),
-    supabase
+    (supabase as any)
       .from("tax_items")
-      .select("name, amount, type, tax_year, filed, due_date")
+      .select("name, amount, type, tax_year, filed, due_date, form_source, category")
       .eq("tax_year", year),
     supabase
       .from("business_engagements")
       .select("client, date, amount, taxes_owed, revenue, status")
       .order("date", { ascending: false })
       .limit(20),
+    (supabase as any)
+      .from("credit_accounts")
+      .select("name, type, balance, credit_limit, status"),
+    (supabase as any)
+      .from("credit_profile")
+      .select("score, score_source, payment_history_pct, credit_card_use_pct, derogatory_marks, credit_age_years, credit_age_months, total_accounts, hard_inquiries, last_updated")
+      .limit(1),
+    (supabase as any)
+      .from("data_freshness")
+      .select("section, last_updated")
+      .order("section"),
+    (supabase as any)
+      .from("knowledge_docs")
+      .select("id, title, category")
+      .eq("user_id", userId)
+      .order("category"),
   ])
 
   const lines: string[] = [
     `Today: ${today.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
     "",
   ]
+
+  // Data freshness — helps assistant know what's stale
+  if (freshnessRes.data?.length) {
+    lines.push("## Data Freshness (last updated)")
+    const now = Date.now()
+    for (const f of freshnessRes.data as Array<{ section: string; last_updated: string }>) {
+      const ago = Math.floor((now - new Date(f.last_updated).getTime()) / (1000 * 60 * 60 * 24))
+      const label = ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`
+      const stale = ago > 14 ? " ⚠️ STALE" : ago > 7 ? " (getting old)" : ""
+      lines.push(`- ${f.section}: ${label}${stale}`)
+    }
+    lines.push("")
+  }
 
   // Household members
   if (profilesRes.data?.length) {
@@ -122,7 +155,10 @@ export async function buildContext(
   if (incomeRes.data?.length) {
     lines.push("## Active Income")
     for (const i of incomeRes.data) {
-      lines.push(`- ${i.name}: $${i.amount.toFixed(2)} (${i.frequency})`)
+      const gross = (i as Record<string, unknown>).gross_amount ? ` | gross: $${Number((i as Record<string, unknown>).gross_amount).toFixed(2)}` : ""
+      const ded = (i as Record<string, unknown>).deductions ? ` | deductions: $${Number((i as Record<string, unknown>).deductions).toFixed(2)}` : ""
+      const bonus = (i as Record<string, unknown>).bonus_amount ? ` | bonus: $${Number((i as Record<string, unknown>).bonus_amount).toFixed(2)}/${(i as Record<string, unknown>).bonus_frequency ?? "annually"}` : ""
+      lines.push(`- ${i.name}: net $${i.amount.toFixed(2)} (${i.frequency})${gross}${ded}${bonus}`)
     }
     lines.push("")
   }
@@ -250,12 +286,19 @@ export async function buildContext(
     lines.push("")
   }
 
-  // Tax items
+  // Tax items with computed summary
   if (taxRes.data?.length) {
-    lines.push(`## Taxes (${year})`)
-    for (const t of taxRes.data) {
-      const status = t.filed ? "✅ Filed" : t.due_date ? `Due ${t.due_date}` : "Not filed"
-      lines.push(`- ${t.name} (${t.type}): $${t.amount} — ${status}`)
+    const taxItems = taxRes.data as any[]
+    const income = taxItems.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0)
+    const payments = taxItems.filter((t) => t.type === "payment").reduce((s, t) => s + Number(t.amount), 0)
+    const deductions = taxItems.filter((t) => t.type === "deduction").reduce((s, t) => s + Number(t.amount), 0)
+    const fedWithheld = taxItems.filter((t) => t.type === "payment" && t.category === "federal").reduce((s, t) => s + Number(t.amount), 0)
+
+    lines.push(`## Taxes (${year}) — Gross: $${income.toFixed(2)}, Deductions: $${deductions.toFixed(2)}, Total Withheld: $${payments.toFixed(2)}, Fed Withheld: $${fedWithheld.toFixed(2)}`)
+    for (const t of taxItems) {
+      const status = t.filed ? "Filed" : t.due_date ? `Due ${t.due_date}` : "Not filed"
+      const form = t.form_source ? ` [${t.form_source}]` : ""
+      lines.push(`- ${t.name} (${t.type}): $${Number(t.amount).toFixed(2)}${form} — ${status}`)
     }
     lines.push("")
   }
@@ -321,6 +364,46 @@ export async function buildContext(
       )
     }
     if (overdue.length || upcoming.length) lines.push("")
+  }
+
+  // Credit profile
+  const creditProfile = creditProfileRes.data?.[0]
+  if (creditProfile) {
+    lines.push(`## Credit Score: ${creditProfile.score} (${creditProfile.score_source})`)
+    if (creditProfile.payment_history_pct != null) lines.push(`- Payment history: ${creditProfile.payment_history_pct}%`)
+    if (creditProfile.credit_card_use_pct != null) lines.push(`- Credit card use: ${creditProfile.credit_card_use_pct}%`)
+    if (creditProfile.derogatory_marks != null) lines.push(`- Derogatory marks: ${creditProfile.derogatory_marks}`)
+    if (creditProfile.credit_age_years != null) lines.push(`- Credit age: ${creditProfile.credit_age_years} yrs, ${creditProfile.credit_age_months ?? 0} mos`)
+    if (creditProfile.total_accounts != null) lines.push(`- Total accounts: ${creditProfile.total_accounts}`)
+    if (creditProfile.hard_inquiries != null) lines.push(`- Hard inquiries: ${creditProfile.hard_inquiries}`)
+    if (creditProfile.last_updated) lines.push(`- Last updated: ${creditProfile.last_updated}`)
+    lines.push("")
+  }
+
+  // Credit accounts
+  if (creditAccountsRes.data?.length) {
+    lines.push("## Credit Accounts")
+    for (const a of creditAccountsRes.data) {
+      const limit = a.credit_limit ? ` / $${Number(a.credit_limit).toFixed(2)} limit` : ""
+      const util = a.credit_limit ? ` (${((Number(a.balance) / Number(a.credit_limit)) * 100).toFixed(0)}% util)` : ""
+      lines.push(`- ${a.name} (${a.type}): $${Number(a.balance).toFixed(2)}${limit}${util} [${a.status}]`)
+    }
+    lines.push("")
+  }
+
+  // Knowledge base (titles only — use search_knowledge_base/read_document to access content)
+  const knowledgeDocs = knowledgeRes?.data as Array<{ id: string; title: string; category: string }> | null
+  if (knowledgeDocs?.length) {
+    lines.push("## Knowledge Base Documents (use search_knowledge_base to search, read_document to read)")
+    const grouped: Record<string, string[]> = {}
+    for (const d of knowledgeDocs) {
+      if (!grouped[d.category]) grouped[d.category] = []
+      grouped[d.category].push(`${d.title} [id: ${d.id}]`)
+    }
+    for (const [cat, titles] of Object.entries(grouped).sort()) {
+      lines.push(`**${cat}:** ${titles.join(", ")}`)
+    }
+    lines.push("")
   }
 
   // Upcoming calendar

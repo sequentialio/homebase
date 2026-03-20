@@ -245,13 +245,17 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "upsert_income_source",
     description:
-      "Add a new income source or update an existing one. Use when the user mentions salary, freelance income, or any recurring income. If updating, provide the id from get_finances.",
+      "Add a new income source or update an existing one. Use when the user mentions salary, freelance income, or any recurring income. If updating, provide the id from get_finances. Amount is the NET (take-home) per pay period.",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Existing income source ID to update (omit to create new)" },
-        name: { type: "string", description: "Source name (e.g. 'Salary', 'Freelance')" },
-        amount: { type: "number", description: "Amount per pay period" },
+        name: { type: "string", description: "Source name (e.g. 'NSC Salary — Net Pay', 'Freelance')" },
+        amount: { type: "number", description: "NET amount per pay period (take-home after deductions)" },
+        gross_amount: { type: "number", description: "GROSS amount per pay period (before deductions, optional)" },
+        deductions: { type: "number", description: "Deductions per pay period (taxes + benefits, optional — auto-calculated from gross - net if omitted)" },
+        bonus_amount: { type: "number", description: "Bonus amount (optional)" },
+        bonus_frequency: { type: "string", enum: ["annually", "quarterly", "monthly"], description: "Bonus frequency (default annually)" },
         frequency: {
           type: "string",
           enum: ["weekly", "biweekly", "monthly", "annually", "one-time"],
@@ -355,6 +359,50 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "upsert_insurance_policy",
+    description:
+      "Add a new insurance policy or update an existing one. Use when the user shares insurance details (premium, provider, renewal date). If updating, provide the id from the context snapshot.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing policy ID to update (omit to create new)" },
+        name: { type: "string", description: "Policy name (e.g. 'Healthy Paws Pet Insurance')" },
+        type: { type: "string", description: "Policy type: auto, health, dental, vision, renters, life, pet, umbrella, other" },
+        provider: { type: "string", description: "Insurance company name" },
+        policy_number: { type: "string", description: "Policy number (optional)" },
+        premium: { type: "number", description: "Premium amount per billing period" },
+        premium_frequency: { type: "string", enum: ["monthly", "quarterly", "annually"], description: "How often premium is billed" },
+        deductible: { type: "number", description: "Annual deductible amount (optional)" },
+        coverage_amount: { type: "number", description: "Total coverage amount (optional)" },
+        renewal_date: { type: "string", description: "Next renewal date YYYY-MM-DD (optional)" },
+        notes: { type: "string", description: "Additional notes (optional)" },
+        active: { type: "boolean", description: "Whether policy is active (default true)" },
+      },
+      required: ["name", "type", "provider", "premium"],
+    },
+  },
+  {
+    name: "upsert_tax_item",
+    description:
+      "Add a new tax item or update an existing one. Use for income, deductions, credits, payments, or other tax-related items. If updating, provide the id from get_finances. Always set form_source (W-2, 1098-E, 1099-NEC, etc.) and category (wages, federal, state, fica, retirement, student_loan, health, standard, business, other) for proper organization in the Taxes tab.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing tax item ID to update (omit to create new)" },
+        name: { type: "string", description: "Item name (e.g. 'W-2 Wages', 'Federal Income Tax Withheld')" },
+        amount: { type: "number", description: "Dollar amount" },
+        type: { type: "string", enum: ["income", "deduction", "credit", "payment", "other"], description: "Tax item type" },
+        tax_year: { type: "number", description: "Tax year (e.g. 2025, 2026)" },
+        form_source: { type: "string", description: "Source form: W-2, 1098-E, 1095-C, 1099-NEC, 1099-INT, 1099-DIV, Estimate, Standard, Manual" },
+        category: { type: "string", description: "Category for grouping: wages, federal, state, fica, retirement, student_loan, health, standard, business, other" },
+        filed: { type: "boolean", description: "Whether this has been filed/claimed (default false)" },
+        due_date: { type: "string", description: "Due date YYYY-MM-DD (optional)" },
+        notes: { type: "string", description: "Additional notes (optional)" },
+      },
+      required: ["name", "amount", "type", "tax_year"],
+    },
+  },
+  {
     name: "add_calendar_event",
     description:
       "Add a new event to the Mita calendar.",
@@ -376,7 +424,107 @@ export const toolDefinitions: Anthropic.Tool[] = [
       required: ["title", "start_at"],
     },
   },
+  {
+    name: "upsert_credit_account",
+    description:
+      "Add a new credit account (credit card or loan) or update an existing one. Use when the user shares credit report details. If updating, provide the id from get_finances.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing credit account ID to update (omit to create new)" },
+        name: { type: "string", description: "Account name (e.g. 'CA COAST CU', 'MOHELA/DOFED')" },
+        type: { type: "string", enum: ["credit_card", "student_loan", "personal_loan", "auto_loan", "mortgage", "other"], description: "Account type" },
+        balance: { type: "number", description: "Current balance" },
+        credit_limit: { type: "number", description: "Credit limit (for credit cards only)" },
+        opened_date: { type: "string", description: "Date account was opened YYYY-MM-DD" },
+        status: { type: "string", enum: ["open", "closed"], description: "Account status" },
+        lender: { type: "string", description: "Lender/institution name (optional)" },
+      },
+      required: ["name", "type", "balance"],
+    },
+  },
+  {
+    name: "update_credit_profile",
+    description:
+      "Update the user's credit score and all score factors. Use when the user shares their Credit Karma or credit report data. Creates the profile if it doesn't exist.",
+    input_schema: {
+      type: "object",
+      properties: {
+        score: { type: "number", description: "Credit score (300-850)" },
+        score_source: { type: "string", enum: ["TransUnion", "Equifax", "Experian"], description: "Score source" },
+        payment_history_pct: { type: "number", description: "Payment history percentage (0-100)" },
+        payment_history_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+        credit_card_use_pct: { type: "number", description: "Credit card utilization percentage" },
+        credit_card_use_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+        derogatory_marks: { type: "number", description: "Number of derogatory marks" },
+        derogatory_marks_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+        credit_age_years: { type: "number", description: "Credit age in years" },
+        credit_age_months: { type: "number", description: "Additional months" },
+        credit_age_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+        total_accounts: { type: "number", description: "Total number of accounts" },
+        total_accounts_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+        hard_inquiries: { type: "number", description: "Number of hard inquiries" },
+        hard_inquiries_rating: { type: "string", enum: ["Excellent", "Good", "Fair", "Needs work", "Poor"] },
+      },
+      required: ["score"],
+    },
+  },
+  {
+    name: "search_knowledge_base",
+    description:
+      "Search the user's knowledge base documents by keyword. Returns matching doc titles, categories, and content snippets. Use this to find relevant reference material (insurance policies, financial advice, tax docs, etc.).",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query — matches against title, content, and category" },
+        category: { type: "string", description: "Optional category filter" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "read_document",
+    description:
+      "Read the full content of a specific knowledge base document by ID. Use after search_knowledge_base to get complete details.",
+    input_schema: {
+      type: "object",
+      properties: {
+        doc_id: { type: "string", description: "The document ID from search results" },
+      },
+      required: ["doc_id"],
+    },
+  },
 ]
+
+// ── Validation helpers ────────────────────────────────────────────────────────
+
+// ── Freshness tracker ─────────────────────────────────────────────────────────
+
+const TOOL_SECTION_MAP: Record<string, string> = {
+  log_transaction: "transactions",
+  bulk_log_transactions: "transactions",
+  import_csv_transactions: "transactions",
+  upsert_account: "accounts",
+  upsert_budget: "budgets",
+  upsert_debt: "debts",
+  upsert_income_source: "income",
+  upsert_recurring_expense: "expenses",
+  upsert_investment: "investments",
+  upsert_insurance_policy: "insurance",
+  upsert_tax_item: "taxes",
+  upsert_business_engagement: "income",
+  upsert_credit_account: "credit",
+  update_credit_profile: "credit",
+}
+
+async function touchFreshness(supabase: SupabaseClient<Database>, userId: string, toolName: string) {
+  const section = TOOL_SECTION_MAP[toolName]
+  if (!section) return
+  await (supabase as any).from("data_freshness").upsert(
+    { user_id: userId, section, last_updated: new Date().toISOString() },
+    { onConflict: "user_id,section" }
+  )
+}
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -453,6 +601,18 @@ export async function executeTool(
       case "upsert_business_engagement":
         return await upsertBusinessEngagement(supabase, userId, input)
 
+      case "upsert_insurance_policy":
+        return await upsertInsurancePolicy(supabase, userId, input)
+
+      case "upsert_tax_item":
+        return await upsertTaxItem(supabase, userId, input)
+
+      case "upsert_credit_account":
+        return await upsertCreditAccount(supabase, userId, input)
+
+      case "update_credit_profile":
+        return await updateCreditProfile(supabase, userId, input)
+
       case "save_note":
         return await saveNote(supabase, userId, input)
 
@@ -462,11 +622,20 @@ export async function executeTool(
       case "add_calendar_event":
         return await addCalendarEvent(supabase, userId, input)
 
+      case "search_knowledge_base":
+        return await searchKnowledgeBase(supabase, userId, input)
+
+      case "read_document":
+        return await readDocument(supabase, userId, input)
+
       default:
         return `Unknown tool: ${name}`
     }
   } catch (err) {
     return `Error executing ${name}: ${err instanceof Error ? err.message : String(err)}`
+  } finally {
+    // Auto-touch freshness for write operations (fire-and-forget)
+    touchFreshness(supabase, userId, name).catch(() => {})
   }
 }
 
@@ -481,7 +650,7 @@ async function getFinances(
     .toISOString()
     .split("T")[0]
 
-  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes, engagementsRes] =
+  const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes, engagementsRes, insuranceRes, taxRes, creditAccountsRes, creditProfileRes] =
     await Promise.all([
       supabase.from("bank_accounts").select("*"),
       supabase
@@ -496,6 +665,10 @@ async function getFinances(
       supabase.from("recurring_expenses").select("*").eq("active", true).order("position"),
       supabase.from("expense_sections").select("*").order("position"),
       supabase.from("business_engagements").select("*").order("date", { ascending: false }),
+      supabase.from("insurance_policies").select("*").order("name"),
+      supabase.from("tax_items").select("*").order("tax_year", { ascending: false }),
+      (supabase as any).from("credit_accounts").select("*").order("name"),
+      (supabase as any).from("credit_profile").select("*").limit(1),
     ])
 
   return JSON.stringify({
@@ -508,6 +681,10 @@ async function getFinances(
     recurring_expenses: recurringRes.data ?? [],
     expense_sections: expSectionsRes.data ?? [],
     business_engagements: engagementsRes.data ?? [],
+    insurance_policies: insuranceRes.data ?? [],
+    tax_items: taxRes.data ?? [],
+    credit_accounts: creditAccountsRes.data ?? [],
+    credit_profile: creditProfileRes.data?.[0] ?? null,
     period_days: days,
   })
 }
@@ -767,22 +944,30 @@ async function upsertIncomeSource(
   input: Record<string, unknown>
 ): Promise<string> {
   const id = input.id as string | undefined
+  const grossAmt = input.gross_amount != null ? Number(input.gross_amount) : null
+  const netAmt = Number(input.amount)
+  const ded = input.deductions != null ? Number(input.deductions) : (grossAmt ? grossAmt - netAmt : null)
+
   const payload = {
     user_id: userId,
     name: input.name as string,
-    amount: Number(input.amount),
+    amount: netAmt,
+    gross_amount: grossAmt,
+    deductions: ded,
+    bonus_amount: input.bonus_amount != null ? Number(input.bonus_amount) : null,
+    bonus_frequency: (input.bonus_frequency as string) ?? null,
     frequency: input.frequency as string,
     next_date: (input.next_date as string) ?? null,
     active: (input.active as boolean) ?? true,
   }
   if (id) {
-    const { error, data } = await supabase.from("income_sources").update(payload).eq("id", id).select().single()
+    const { error, data } = await supabase.from("income_sources").update(payload as never).eq("id", id).select().single()
     if (error) return `Failed to update income source: ${error.message}`
-    return `Income source updated: "${data.name}" — $${data.amount} ${data.frequency}`
+    return `Income source updated: "${data.name}" — net $${data.amount} ${data.frequency}${grossAmt ? `, gross $${grossAmt}` : ""}${ded ? `, deductions $${ded}` : ""}`
   } else {
-    const { error, data } = await supabase.from("income_sources").insert(payload).select().single()
+    const { error, data } = await supabase.from("income_sources").insert(payload as never).select().single()
     if (error) return `Failed to add income source: ${error.message}`
-    return `Income source added: "${data.name}" — $${data.amount} ${data.frequency}`
+    return `Income source added: "${data.name}" — net $${data.amount} ${data.frequency}${grossAmt ? `, gross $${grossAmt}` : ""}${ded ? `, deductions $${ded}` : ""}`
   }
 }
 
@@ -900,6 +1085,146 @@ function parseCsvLine(line: string): string[] {
   }
   fields.push(current.trim())
   return fields
+}
+
+async function upsertInsurancePolicy(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const nameErr = validateString(input.name, "Name")
+  if (nameErr) return nameErr
+
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    type: (input.type as string) ?? "other",
+    provider: (input.provider as string) ?? "",
+    policy_number: (input.policy_number as string) ?? null,
+    premium: Number(input.premium ?? 0),
+    premium_frequency: (input.premium_frequency as string) ?? "monthly",
+    deductible: input.deductible != null ? Number(input.deductible) : null,
+    coverage_amount: input.coverage_amount != null ? Number(input.coverage_amount) : null,
+    renewal_date: (input.renewal_date as string) ?? null,
+    notes: (input.notes as string) ?? null,
+    active: input.active !== false,
+  }
+
+  const id = input.id as string | undefined
+  if (id) {
+    const { error, data } = await supabase.from("insurance_policies").update(payload as never).eq("id", id).select().single()
+    if (error) return `Failed to update insurance policy: ${error.message}`
+    return `Insurance policy updated: "${data.name}" (${data.type}) — $${data.premium}/${payload.premium_frequency}`
+  } else {
+    const { error, data } = await supabase.from("insurance_policies").insert(payload as never).select().single()
+    if (error) return `Failed to add insurance policy: ${error.message}`
+    return `Insurance policy added: "${data.name}" (${data.type}) — $${data.premium}/${payload.premium_frequency}`
+  }
+}
+
+async function upsertTaxItem(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const nameErr = validateString(input.name, "Name")
+  if (nameErr) return nameErr
+
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    amount: Number(input.amount ?? 0),
+    type: (input.type as string) ?? "other",
+    tax_year: Number(input.tax_year ?? new Date().getFullYear()),
+    form_source: (input.form_source as string) ?? null,
+    category: (input.category as string) ?? null,
+    filed: (input.filed as boolean) ?? false,
+    due_date: (input.due_date as string) ?? null,
+    notes: (input.notes as string) ?? null,
+  }
+
+  const id = input.id as string | undefined
+  if (id) {
+    const { error, data } = await supabase.from("tax_items").update(payload as never).eq("id", id).select().single()
+    if (error) return `Failed to update tax item: ${error.message}`
+    return `Tax item updated: "${data.name}" ($${data.amount}) — ${data.type} for ${data.tax_year}${payload.form_source ? ` [${payload.form_source}]` : ""}`
+  } else {
+    const { error, data } = await supabase.from("tax_items").insert(payload as never).select().single()
+    if (error) return `Failed to add tax item: ${error.message}`
+    return `Tax item added: "${data.name}" ($${data.amount}) — ${data.type} for ${data.tax_year}${payload.form_source ? ` [${payload.form_source}]` : ""}`
+  }
+}
+
+async function upsertCreditAccount(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const nameErr = validateString(input.name, "Name")
+  if (nameErr) return nameErr
+
+  const payload = {
+    user_id: userId,
+    name: input.name as string,
+    type: (input.type as string) ?? "credit_card",
+    balance: Number(input.balance ?? 0),
+    credit_limit: input.credit_limit != null ? Number(input.credit_limit) : null,
+    opened_date: (input.opened_date as string) ?? null,
+    status: (input.status as string) ?? "open",
+    lender: (input.lender as string) ?? null,
+  }
+
+  const id = input.id as string | undefined
+  if (id) {
+    const { error, data } = await (supabase as any).from("credit_accounts").update(payload).eq("id", id).select().single()
+    if (error) return `Failed to update credit account: ${error.message}`
+    return `Credit account updated: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
+  } else {
+    const { error, data } = await (supabase as any).from("credit_accounts").insert(payload).select().single()
+    if (error) return `Failed to add credit account: ${error.message}`
+    return `Credit account added: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
+  }
+}
+
+async function updateCreditProfile(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const score = Number(input.score)
+  if (!Number.isFinite(score) || score < 300 || score > 850) return "Score must be between 300 and 850"
+
+  const payload = {
+    user_id: userId,
+    score,
+    score_source: (input.score_source as string) ?? "TransUnion",
+    payment_history_pct: input.payment_history_pct != null ? Number(input.payment_history_pct) : null,
+    payment_history_rating: (input.payment_history_rating as string) ?? null,
+    credit_card_use_pct: input.credit_card_use_pct != null ? Number(input.credit_card_use_pct) : null,
+    credit_card_use_rating: (input.credit_card_use_rating as string) ?? null,
+    derogatory_marks: input.derogatory_marks != null ? Number(input.derogatory_marks) : null,
+    derogatory_marks_rating: (input.derogatory_marks_rating as string) ?? null,
+    credit_age_years: input.credit_age_years != null ? Number(input.credit_age_years) : null,
+    credit_age_months: input.credit_age_months != null ? Number(input.credit_age_months) : null,
+    credit_age_rating: (input.credit_age_rating as string) ?? null,
+    total_accounts: input.total_accounts != null ? Number(input.total_accounts) : null,
+    total_accounts_rating: (input.total_accounts_rating as string) ?? null,
+    hard_inquiries: input.hard_inquiries != null ? Number(input.hard_inquiries) : null,
+    hard_inquiries_rating: (input.hard_inquiries_rating as string) ?? null,
+    last_updated: new Date().toISOString().split("T")[0],
+  }
+
+  // Upsert: try update first, then insert if not found
+  const { data: existing } = await (supabase as any).from("credit_profile").select("id").eq("user_id", userId).single()
+  if (existing) {
+    const { error } = await (supabase as any).from("credit_profile").update(payload).eq("id", existing.id)
+    if (error) return `Failed to update credit profile: ${error.message}`
+    return `Credit profile updated: score ${score} (${payload.score_source})`
+  } else {
+    const { error } = await (supabase as any).from("credit_profile").insert(payload)
+    if (error) return `Failed to create credit profile: ${error.message}`
+    return `Credit profile created: score ${score} (${payload.score_source})`
+  }
 }
 
 async function importCsvTransactions(
@@ -1082,4 +1407,67 @@ async function addCalendarEvent(
 
   if (error) return `Failed to add event: ${error.message}`
   return `Event added: "${data.title}" on ${new Date(data.start_at).toLocaleDateString()}`
+}
+
+async function searchKnowledgeBase(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const query = String(input.query ?? "").toLowerCase()
+  if (!query) return "Please provide a search query."
+
+  let q = (supabase as any)
+    .from("knowledge_docs")
+    .select("id, title, category, content")
+    .eq("user_id", userId)
+
+  if (input.category) {
+    q = q.eq("category", String(input.category))
+  }
+
+  const { data, error } = await q.order("title")
+  if (error) return `Failed to search: ${error.message}`
+  if (!data || data.length === 0) return "No documents found in knowledge base."
+
+  // Client-side text search (simple but effective for small doc counts)
+  const matches = data.filter(
+    (d: any) =>
+      d.title.toLowerCase().includes(query) ||
+      d.content.toLowerCase().includes(query) ||
+      d.category.toLowerCase().includes(query)
+  )
+
+  if (matches.length === 0) return `No documents match "${input.query}".`
+
+  const results = matches.map((d: any) => {
+    const idx = d.content.toLowerCase().indexOf(query)
+    const snippet =
+      idx >= 0
+        ? "..." + d.content.slice(Math.max(0, idx - 50), idx + 100).trim() + "..."
+        : d.content.slice(0, 120).trim() + (d.content.length > 120 ? "..." : "")
+    return `[${d.id}] "${d.title}" (${d.category})\n  ${snippet}`
+  })
+
+  return `Found ${matches.length} document(s):\n\n${results.join("\n\n")}`
+}
+
+async function readDocument(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const docId = String(input.doc_id ?? "")
+  if (!docId) return "Please provide a document ID."
+
+  const { data, error } = await (supabase as any)
+    .from("knowledge_docs")
+    .select("*")
+    .eq("id", docId)
+    .eq("user_id", userId)
+    .single()
+
+  if (error || !data) return `Document not found or access denied.`
+
+  return `# ${data.title}\n**Category:** ${data.category}\n**Updated:** ${new Date(data.updated_at).toLocaleDateString()}\n\n${data.content}`
 }

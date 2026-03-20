@@ -48,6 +48,10 @@ export default async function FinancesPage() {
     supabase.from("business_engagements").select("*").eq("user_id", user.id).order("date", { ascending: false }),
   ])
 
+  // Credit tables not in generated types — query separately
+  const { data: creditAccounts } = await (supabase as any).from("credit_accounts").select("*").eq("user_id", user.id).order("name")
+  const { data: creditProfiles } = await (supabase as any).from("credit_profile").select("*").eq("user_id", user.id).limit(1)
+
   return (
     <FinancesContent
       userId={user.id}
@@ -67,6 +71,8 @@ export default async function FinancesPage() {
       initialInvestments={investments ?? []}
       initialInvestmentSections={investmentSections ?? []}
       initialEngagements={engagements ?? []}
+      initialCreditAccounts={creditAccounts ?? []}
+      initialCreditProfile={creditProfiles?.[0] ?? null}
     />
   )
 }
