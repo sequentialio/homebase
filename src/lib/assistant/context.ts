@@ -40,7 +40,7 @@ export async function buildContext(
     knowledgeRes,
     nwHistoryRes,
     alertsRes,
-    systemDocsRes,
+    knowledgeSystemRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
@@ -117,12 +117,6 @@ export async function buildContext(
       .neq("category", "System")
       .order("category"),
     (supabase as any)
-      .from("knowledge_docs")
-      .select("id, title, content, updated_at")
-      .eq("user_id", userId)
-      .eq("category", "System")
-      .order("updated_at", { ascending: false }),
-    (supabase as any)
       .from("net_worth_snapshots")
       .select("snapshot_date, net_worth")
       .eq("user_id", userId)
@@ -136,6 +130,12 @@ export async function buildContext(
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order("created_at", { ascending: false })
       .limit(10),
+    (supabase as any)
+      .from("knowledge_docs")
+      .select("id, title, content, updated_at")
+      .eq("user_id", userId)
+      .eq("category", "System")
+      .order("updated_at", { ascending: false }),
   ])
 
   const lines: string[] = [
@@ -439,7 +439,7 @@ export async function buildContext(
   }
 
   // System knowledge docs — loaded in full every conversation
-  const systemDocs = systemDocsRes?.data as Array<{ id: string; title: string; content: string; updated_at: string }> | null
+  const systemDocs = knowledgeSystemRes?.data as Array<{ id: string; title: string; content: string; updated_at: string }> | null
   if (systemDocs?.length) {
     for (const doc of systemDocs) {
       lines.push(`## [System Doc] ${doc.title} [id: ${doc.id}]`)
