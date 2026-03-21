@@ -494,6 +494,24 @@ export const toolDefinitions: Anthropic.Tool[] = [
       required: ["doc_id"],
     },
   },
+  {
+    name: "save_to_knowledge_base",
+    description:
+      "Save a new document to the user's knowledge base, or update an existing one. Use this to preserve important plans, summaries, strategies, or reference material from the conversation so the user can access it later. Always write clean markdown with clear headings. If doc_id is provided, the existing document will be updated.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short descriptive title for the document" },
+        content: { type: "string", description: "Full markdown content of the document" },
+        category: {
+          type: "string",
+          description: "Category for the document. Choose from: General, Insurance, Financial Advice, Tax Reference, Legal, Medical, Work, Personal — or provide a custom category.",
+        },
+        doc_id: { type: "string", description: "Optional: existing document ID to update instead of creating a new one" },
+      },
+      required: ["title", "content", "category"],
+    },
+  },
 ]
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -627,6 +645,9 @@ export async function executeTool(
 
       case "read_document":
         return await readDocument(supabase, userId, input)
+
+      case "save_to_knowledge_base":
+        return await saveToKnowledgeBase(supabase, userId, input)
 
       default:
         return `Unknown tool: ${name}`
@@ -1470,4 +1491,42 @@ async function readDocument(
   if (error || !data) return `Document not found or access denied.`
 
   return `# ${data.title}\n**Category:** ${data.category}\n**Updated:** ${new Date(data.updated_at).toLocaleDateString()}\n\n${data.content}`
+}
+
+async function saveToKnowledgeBase(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const title = String(input.title ?? "").trim()
+  const content = String(input.content ?? "").trim()
+  const category = String(input.category ?? "General").trim()
+  const docId = input.doc_id ? String(input.doc_id).trim() : null
+
+  if (!title) return "Title is required."
+  if (!content) return "Content is required."
+
+  const now = new Date().toISOString()
+
+  if (docId) {
+    // Update existing document
+    const { data, error } = await (supabase as any)
+      .from("knowledge_docs")
+      .update({ title, content, category, updated_at: now })
+      .eq("id", docId)
+      .eq("user_id", userId)
+      .select()
+      .single()
+    if (error || !data) return `Failed to update document: ${error?.message ?? "not found"}`
+    return `Knowledge base document updated: "${data.title}" (${data.category})`
+  } else {
+    // Create new document
+    const { data, error } = await (supabase as any)
+      .from("knowledge_docs")
+      .insert({ user_id: userId, title, content, category, created_at: now, updated_at: now })
+      .select()
+      .single()
+    if (error || !data) return `Failed to save document: ${error?.message}`
+    return `Saved to knowledge base: "${data.title}" (${data.category}) — ID: ${data.id}`
+  }
 }

@@ -394,7 +394,7 @@ export async function buildContext(
   // Knowledge base (titles only — use search_knowledge_base/read_document to access content)
   const knowledgeDocs = knowledgeRes?.data as Array<{ id: string; title: string; category: string }> | null
   if (knowledgeDocs?.length) {
-    lines.push("## Knowledge Base Documents (use search_knowledge_base to search, read_document to read)")
+    lines.push("## Knowledge Base Documents (use search_knowledge_base to search, read_document to read, save_to_knowledge_base to save new docs or update existing ones)")
     const grouped: Record<string, string[]> = {}
     for (const d of knowledgeDocs) {
       if (!grouped[d.category]) grouped[d.category] = []
