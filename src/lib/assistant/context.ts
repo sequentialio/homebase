@@ -38,6 +38,8 @@ export async function buildContext(
     creditProfileRes,
     freshnessRes,
     knowledgeRes,
+    nwHistoryRes,
+    alertsRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
@@ -58,7 +60,7 @@ export async function buildContext(
       .select("category, monthly_limit")
       .eq("year", year)
       .eq("month", month),
-    supabase.from("debts").select("name, balance, interest_rate, min_payment"),
+    supabase.from("debts").select("name, balance, interest_rate, min_payment, status, employer_contribution"),
     supabase
       .from("grocery_items")
       .select("name, quantity, unit, low_threshold, in_pantry, category, expiry_date"),
@@ -112,6 +114,20 @@ export async function buildContext(
       .select("id, title, category")
       .eq("user_id", userId)
       .order("category"),
+    (supabase as any)
+      .from("net_worth_snapshots")
+      .select("snapshot_date, net_worth")
+      .eq("user_id", userId)
+      .order("snapshot_date", { ascending: false })
+      .limit(6),
+    (supabase as any)
+      .from("alerts")
+      .select("id, type, title, severity, due_date, created_at")
+      .eq("user_id", userId)
+      .eq("is_read", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ])
 
   const lines: string[] = [
@@ -238,7 +254,9 @@ export async function buildContext(
     const total = debtsRes.data.reduce((s, d) => s + d.balance, 0)
     for (const d of debtsRes.data) {
       const rate = d.interest_rate ? ` @ ${d.interest_rate}%` : ""
-      lines.push(`- ${d.name}: $${d.balance.toFixed(2)}${rate}`)
+      const status = (d as any).status && (d as any).status !== "active" ? ` [${(d as any).status}]` : ""
+      const empContrib = (d as any).employer_contribution ? ` (employer pays $${(d as any).employer_contribution}/mo)` : ""
+      lines.push(`- ${d.name}: $${d.balance.toFixed(2)}${rate}${status}${empContrib}`)
     }
     lines.push(`Total debt: $${total.toFixed(2)}`)
     lines.push("")
@@ -251,6 +269,27 @@ export async function buildContext(
   const netWorth = totalLiquid + totalInvestments - totalDebt
   if (totalLiquid || totalInvestments || totalDebt) {
     lines.push(`## Net Worth: $${netWorth.toFixed(2)} (liquid $${totalLiquid.toFixed(2)} + investments $${totalInvestments.toFixed(2)} − debt $${totalDebt.toFixed(2)})`)
+    // Net worth trend from snapshots
+    const nwHistory = nwHistoryRes?.data as Array<{ snapshot_date: string; net_worth: number }> | null
+    if (nwHistory && nwHistory.length >= 2) {
+      const oldest = nwHistory[nwHistory.length - 1]
+      const change = netWorth - oldest.net_worth
+      const trendStr = change >= 0 ? `+$${change.toFixed(2)}` : `-$${Math.abs(change).toFixed(2)}`
+      lines.push(`Net worth trend: ${trendStr} since ${oldest.snapshot_date} (use get_net_worth_history for full data)`)
+    } else if (!nwHistory || nwHistory.length === 0) {
+      lines.push(`Net worth trend: no history yet — use snapshot_net_worth to start tracking`)
+    }
+    lines.push("")
+  }
+
+  // Active alerts
+  const activeAlerts = alertsRes?.data as Array<{ id: string; type: string; title: string; severity: string; due_date: string | null }> | null
+  if (activeAlerts && activeAlerts.length > 0) {
+    lines.push("## Active Alerts (unread — use dismiss_alert when resolved)")
+    for (const a of activeAlerts) {
+      const due = a.due_date ? ` (due ${a.due_date})` : ""
+      lines.push(`- [${a.severity.toUpperCase()}] ${a.title}${due} [id: ${a.id}]`)
+    }
     lines.push("")
   }
 

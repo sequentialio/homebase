@@ -212,7 +212,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "upsert_debt",
     description:
-      "Add a new debt or update an existing one (balance, interest rate, min payment, payoff date). Use when the user shares a loan or credit card statement. If updating, provide the id from get_finances.",
+      "Add a new debt or update an existing one (balance, interest rate, min payment, payoff date, status, employer contribution). Use when the user shares a loan or credit card statement. If updating, provide the id from get_finances.",
     input_schema: {
       type: "object",
       properties: {
@@ -222,6 +222,8 @@ export const toolDefinitions: Anthropic.Tool[] = [
         interest_rate: { type: "number", description: "Annual interest rate as a percentage (e.g. 6.5)" },
         min_payment: { type: "number", description: "Minimum monthly payment" },
         payoff_date: { type: "string", description: "Estimated payoff date (YYYY-MM-DD)" },
+        status: { type: "string", enum: ["active", "forbearance", "deferment", "paid_off"], description: "Loan status (default: active). Use forbearance/deferment for student loans not in repayment." },
+        employer_contribution: { type: "number", description: "Monthly employer contribution toward this debt (e.g. employer student loan repayment benefit)" },
         notes: { type: "string", description: "Any additional notes" },
       },
       required: ["name", "balance"],
@@ -512,6 +514,135 @@ export const toolDefinitions: Anthropic.Tool[] = [
       required: ["title", "content", "category"],
     },
   },
+  {
+    name: "get_budget_forecast",
+    description:
+      "Project month-end spending per budget category based on current spend and days elapsed. Returns forecasted overage or underage for each category and overall cash flow pace. Use when the user asks about budget projections, spending pace, or whether they'll blow their budget this month.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month 1-12 (default: current month)" },
+        year: { type: "number", description: "Year (default: current year)" },
+      },
+    },
+  },
+  {
+    name: "check_recurring_reconciliation",
+    description:
+      "Compare active recurring expenses against actual transactions for a given month to identify missing charges. Useful for catching skipped autopays, subscription lapses, or bills that haven't posted yet. Returns matched, missing, and pending recurring items.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month 1-12 (default: current month)" },
+        year: { type: "number", description: "Year (default: current year)" },
+      },
+    },
+  },
+  {
+    name: "snapshot_net_worth",
+    description:
+      "Save a net worth snapshot for today based on current bank accounts, investments, and debts. One snapshot per day — calling again on the same day updates it. Call proactively after the user updates their balances or asks about net worth trends. This enables historical tracking and trend charts.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "get_net_worth_history",
+    description:
+      "Retrieve historical net worth snapshots to show trends over time. Returns snapshots with net worth, assets, liabilities, and breakdown. Use when the user asks about progress, trends, or 'how am I doing vs last month'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Number of snapshots to retrieve (default 12, max 52)" },
+      },
+    },
+  },
+  {
+    name: "simulate_budget_change",
+    description:
+      "Run a what-if scenario: model hypothetical changes to income or expenses and show the impact on monthly cash flow, savings rate, and (optionally) debt payoff timeline. Pure computation — nothing is saved. Use when the user asks 'what if I cut X', 'what if rent goes up', or 'what if my income changes'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        income_change: { type: "number", description: "Monthly income change in dollars (positive = increase, negative = decrease). 0 if no change." },
+        expense_changes: {
+          type: "array",
+          description: "List of expense adjustments by category",
+          items: {
+            type: "object",
+            properties: {
+              category: { type: "string" },
+              delta: { type: "number", description: "Change in dollars per month (positive = more spending, negative = less)" },
+            },
+            required: ["category", "delta"],
+          },
+        },
+        extra_debt_payment: { type: "number", description: "Additional monthly debt payment to model (optional)" },
+        target_debt_name: { type: "string", description: "Name of the debt to apply extra payment toward (optional)" },
+        months_to_project: { type: "number", description: "How many months to project into the future (default 12)" },
+      },
+      required: ["expense_changes"],
+    },
+  },
+  {
+    name: "calculate_withholding_adjustment",
+    description:
+      "Calculate recommended per-paycheck withholding adjustment to break even or hit a target refund by year-end. Uses 2025 federal tax brackets. Call get_finances first to get tax items if use_stored_tax_data is true.",
+    input_schema: {
+      type: "object",
+      properties: {
+        paychecks_remaining: { type: "number", description: "Number of paychecks remaining in the tax year" },
+        current_withholding_per_check: { type: "number", description: "Current federal withholding per paycheck in dollars" },
+        filing_status: { type: "string", enum: ["single", "married_jointly", "married_separately", "head_of_household"], description: "Filing status (default: single)" },
+        use_stored_tax_data: { type: "boolean", description: "Pull gross income and withholding totals from stored tax_items (default true). Set false to use override values." },
+        override_gross_income: { type: "number", description: "Override: total gross income YTD (use when use_stored_tax_data is false)" },
+        override_total_withheld: { type: "number", description: "Override: total federal withheld YTD (use when use_stored_tax_data is false)" },
+        target_refund: { type: "number", description: "Target refund amount (default 0 = break even)" },
+      },
+      required: ["paychecks_remaining", "current_withholding_per_check"],
+    },
+  },
+  {
+    name: "create_alert",
+    description:
+      "Create a persistent notification that appears in the app's alert bell. Use proactively for: budget categories over 80% with days left in the month (warning), budget over 100% (critical), recurring expenses with billing_day within 3 days (info), insurance renewals within 30 days (warning). Call get_alerts first to avoid creating duplicates. Severity: info, warning, critical.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "Alert type slug: budget_warning, upcoming_bill, recurring_missed, net_worth_drop, insurance_renewal, custom" },
+        title: { type: "string", description: "Short alert title (max 60 chars)" },
+        message: { type: "string", description: "Detailed alert message (1-2 sentences)" },
+        severity: { type: "string", enum: ["info", "warning", "critical"] },
+        due_date: { type: "string", description: "Associated due date YYYY-MM-DD (optional)" },
+        expires_at: { type: "string", description: "ISO 8601 datetime when this alert auto-expires (optional). Default: end of current month for budget alerts, 7 days for bills." },
+      },
+      required: ["type", "title", "message", "severity"],
+    },
+  },
+  {
+    name: "get_alerts",
+    description:
+      "Get the user's active (non-expired) alerts. Call before create_alert to check for existing alerts of the same type to avoid duplicates.",
+    input_schema: {
+      type: "object",
+      properties: {
+        include_read: { type: "boolean", description: "Include already-dismissed alerts (default false)" },
+      },
+    },
+  },
+  {
+    name: "dismiss_alert",
+    description:
+      "Mark an alert as read/dismissed. Call when the user acknowledges an alert or the issue is resolved.",
+    input_schema: {
+      type: "object",
+      properties: {
+        alert_id: { type: "string", description: "The alert ID to dismiss" },
+      },
+      required: ["alert_id"],
+    },
+  },
 ]
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -533,6 +664,8 @@ const TOOL_SECTION_MAP: Record<string, string> = {
   upsert_business_engagement: "income",
   upsert_credit_account: "credit",
   update_credit_profile: "credit",
+  snapshot_net_worth: "accounts",
+  create_alert: "alerts",
 }
 
 async function touchFreshness(supabase: SupabaseClient<Database>, userId: string, toolName: string) {
@@ -648,6 +781,33 @@ export async function executeTool(
 
       case "save_to_knowledge_base":
         return await saveToKnowledgeBase(supabase, userId, input)
+
+      case "get_budget_forecast":
+        return await getBudgetForecast(supabase, userId, input)
+
+      case "check_recurring_reconciliation":
+        return await checkRecurringReconciliation(supabase, userId, input)
+
+      case "snapshot_net_worth":
+        return await snapshotNetWorth(supabase, userId)
+
+      case "get_net_worth_history":
+        return await getNetWorthHistory(supabase, userId, input)
+
+      case "simulate_budget_change":
+        return await simulateBudgetChange(supabase, userId, input)
+
+      case "calculate_withholding_adjustment":
+        return await calculateWithholdingAdjustment(supabase, userId, input)
+
+      case "create_alert":
+        return await createAlert(supabase, userId, input)
+
+      case "get_alerts":
+        return await getAlerts(supabase, userId, input)
+
+      case "dismiss_alert":
+        return await dismissAlert(supabase, userId, input)
 
       default:
         return `Unknown tool: ${name}`
@@ -922,14 +1082,18 @@ async function upsertDebt(
     interest_rate: input.interest_rate != null ? Number(input.interest_rate) : null,
     min_payment: input.min_payment != null ? Number(input.min_payment) : null,
     payoff_date: (input.payoff_date as string) ?? null,
+    status: (input.status as string) ?? "active",
+    employer_contribution: input.employer_contribution != null ? Number(input.employer_contribution) : null,
     notes: (input.notes as string) ?? null,
   }
   if (id) {
-    const { error, data } = await supabase.from("debts").update(payload).eq("id", id).select().single()
+    const { error, data } = await supabase.from("debts").update(payload as never).eq("id", id).select().single()
     if (error) return `Failed to update debt: ${error.message}`
-    return `Debt updated: "${data.name}" — balance $${data.balance}${data.min_payment ? `, min payment $${data.min_payment}` : ""}`
+    const statusNote = (data as any).status && (data as any).status !== "active" ? ` [${(data as any).status}]` : ""
+    const empNote = (data as any).employer_contribution ? ` (employer contributes $${(data as any).employer_contribution}/mo)` : ""
+    return `Debt updated: "${data.name}" — balance $${data.balance}${data.min_payment ? `, min payment $${data.min_payment}` : ""}${statusNote}${empNote}`
   } else {
-    const { error, data } = await supabase.from("debts").insert(payload).select().single()
+    const { error, data } = await supabase.from("debts").insert(payload as never).select().single()
     if (error) return `Failed to add debt: ${error.message}`
     return `Debt added: "${data.name}" — balance $${data.balance}`
   }
@@ -1529,4 +1693,494 @@ async function saveToKnowledgeBase(
     if (error || !data) return `Failed to save document: ${error?.message}`
     return `Saved to knowledge base: "${data.title}" (${data.category}) — ID: ${data.id}`
   }
+}
+
+// ── Budget forecast ───────────────────────────────────────────────────────────
+
+async function getBudgetForecast(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const now = new Date()
+  const month = Number(input.month ?? now.getMonth() + 1)
+  const year = Number(input.year ?? now.getFullYear())
+
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const daysElapsed = year === now.getFullYear() && month === now.getMonth() + 1
+    ? now.getDate()
+    : daysInMonth
+
+  const [txRes, budgetsRes] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("category, amount, type")
+      .eq("user_id", userId)
+      .gte("date", startDate)
+      .lt("date", `${year}-${String(month + 1).padStart(2, "0")}-01`)
+      .eq("type", "expense"),
+    supabase.from("budgets").select("*").eq("user_id", userId),
+  ])
+
+  const transactions = txRes.data ?? []
+  const budgets = budgetsRes.data ?? []
+
+  // Sum spending by category
+  const spentByCategory: Record<string, number> = {}
+  for (const tx of transactions) {
+    const cat = tx.category ?? "Uncategorized"
+    spentByCategory[cat] = (spentByCategory[cat] ?? 0) + Number(tx.amount)
+  }
+
+  const results: Array<Record<string, unknown>> = []
+  let totalBudget = 0
+  let totalProjected = 0
+
+  for (const budget of budgets) {
+    const spent = spentByCategory[budget.category] ?? 0
+    const dailyRate = daysElapsed > 0 ? spent / daysElapsed : 0
+    const projected = dailyRate * daysInMonth
+    const variance = budget.monthly_limit - projected
+    const pct = budget.monthly_limit > 0 ? (spent / budget.monthly_limit) * 100 : 0
+    const status = projected > budget.monthly_limit ? "over" : pct > 75 ? "at_risk" : "on_track"
+    totalBudget += budget.monthly_limit
+    totalProjected += projected
+    results.push({
+      category: budget.category,
+      spent_to_date: Math.round(spent * 100) / 100,
+      budget: budget.monthly_limit,
+      daily_rate: Math.round(dailyRate * 100) / 100,
+      projected_month_end: Math.round(projected * 100) / 100,
+      variance: Math.round(variance * 100) / 100,
+      pct_used: Math.round(pct),
+      status,
+    })
+  }
+
+  // Categories with spending but no budget
+  for (const [cat, spent] of Object.entries(spentByCategory)) {
+    if (!budgets.find((b) => b.category === cat)) {
+      const dailyRate = daysElapsed > 0 ? spent / daysElapsed : 0
+      results.push({
+        category: cat,
+        spent_to_date: Math.round(spent * 100) / 100,
+        budget: null,
+        daily_rate: Math.round(dailyRate * 100) / 100,
+        projected_month_end: Math.round(dailyRate * daysInMonth * 100) / 100,
+        variance: null,
+        status: "no_budget",
+      })
+    }
+  }
+
+  results.sort((a, b) => {
+    const order = { over: 0, at_risk: 1, no_budget: 2, on_track: 3 }
+    return (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3)
+  })
+
+  return JSON.stringify({
+    month,
+    year,
+    days_elapsed: daysElapsed,
+    days_in_month: daysInMonth,
+    categories: results,
+    total_budget: Math.round(totalBudget * 100) / 100,
+    total_projected: Math.round(totalProjected * 100) / 100,
+    total_variance: Math.round((totalBudget - totalProjected) * 100) / 100,
+  })
+}
+
+// ── Recurring reconciliation ──────────────────────────────────────────────────
+
+async function checkRecurringReconciliation(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const now = new Date()
+  const month = Number(input.month ?? now.getMonth() + 1)
+  const year = Number(input.year ?? now.getFullYear())
+  const today = now.getDate()
+
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-01`
+
+  const [recurringRes, txRes] = await Promise.all([
+    supabase.from("recurring_expenses").select("*").eq("user_id", userId).eq("active", true),
+    supabase.from("transactions").select("*").eq("user_id", userId).gte("date", startDate).lt("date", endDate).eq("type", "expense"),
+  ])
+
+  const recurring = recurringRes.data ?? []
+  const transactions = txRes.data ?? []
+
+  const matched: Array<Record<string, unknown>> = []
+  const missing: Array<Record<string, unknown>> = []
+  const pending: Array<Record<string, unknown>> = []
+
+  for (const expense of recurring) {
+    if (expense.frequency !== "monthly" && expense.frequency !== "weekly" && expense.frequency !== "biweekly") continue
+    const billingDay = (expense as any).billing_day as number | null
+    const nameKey = expense.name.toLowerCase().substring(0, 8)
+
+    const match = transactions.find((tx) => {
+      const nameMatch = (tx.description ?? "").toLowerCase().includes(nameKey)
+      const amountMatch = expense.amount > 0 ? Math.abs(Number(tx.amount) - expense.amount) / expense.amount < 0.20 : true
+      return nameMatch && amountMatch
+    })
+
+    if (match) {
+      matched.push({ name: expense.name, amount: expense.amount, matched_tx: match.description, matched_date: match.date })
+    } else if (billingDay && billingDay <= today) {
+      missing.push({ name: expense.name, amount: expense.amount, expected_day: billingDay, note: "Billing day passed — no matching transaction found" })
+    } else {
+      pending.push({ name: expense.name, amount: expense.amount, expected_day: billingDay ?? "unknown" })
+    }
+  }
+
+  return JSON.stringify({
+    month, year,
+    matched: matched.length,
+    missing: missing.length,
+    pending: pending.length,
+    matched_items: matched,
+    missing_items: missing,
+    pending_items: pending,
+    summary: `${matched.length} matched, ${missing.length} missing (overdue), ${pending.length} not yet due`,
+  })
+}
+
+// ── Net worth snapshot ────────────────────────────────────────────────────────
+
+async function snapshotNetWorth(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<string> {
+  const [accountsRes, investmentsRes, debtsRes] = await Promise.all([
+    supabase.from("bank_accounts").select("name, balance").eq("user_id", userId),
+    supabase.from("investments").select("name, balance").eq("user_id", userId),
+    supabase.from("debts").select("name, balance").eq("user_id", userId),
+  ])
+
+  const accounts = accountsRes.data ?? []
+  const investments = investmentsRes.data ?? []
+  const debts = debtsRes.data ?? []
+
+  const liquid = accounts.reduce((s, a) => s + Number(a.balance ?? 0), 0)
+  const invested = investments.reduce((s, i) => s + Number(i.balance ?? 0), 0)
+  const assets = liquid + invested
+  const liabilities = debts.reduce((s, d) => s + Number(d.balance ?? 0), 0)
+  const netWorth = assets - liabilities
+
+  const breakdown = {
+    liquid: Math.round(liquid * 100) / 100,
+    investments: Math.round(invested * 100) / 100,
+    total_debt: Math.round(liabilities * 100) / 100,
+    by_account: accounts.map((a) => ({ name: a.name, balance: Number(a.balance ?? 0) })),
+    by_investment: investments.map((i) => ({ name: i.name, balance: Number(i.balance ?? 0) })),
+    by_debt: debts.map((d) => ({ name: d.name, balance: Number(d.balance ?? 0) })),
+  }
+
+  const today = new Date().toISOString().split("T")[0]
+  const { error } = await (supabase as any)
+    .from("net_worth_snapshots")
+    .upsert(
+      { user_id: userId, snapshot_date: today, net_worth: Math.round(netWorth * 100) / 100, assets: Math.round(assets * 100) / 100, liabilities: Math.round(liabilities * 100) / 100, breakdown },
+      { onConflict: "user_id,snapshot_date" }
+    )
+
+  if (error) return `Failed to save snapshot: ${error.message}`
+  return `Net worth snapshot saved: $${Math.round(netWorth * 100) / 100} (assets $${Math.round(assets * 100) / 100} — liabilities $${Math.round(liabilities * 100) / 100})`
+}
+
+async function getNetWorthHistory(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const limit = Math.min(Number(input.limit ?? 12), 52)
+  const { data, error } = await (supabase as any)
+    .from("net_worth_snapshots")
+    .select("snapshot_date, net_worth, assets, liabilities, breakdown")
+    .eq("user_id", userId)
+    .order("snapshot_date", { ascending: false })
+    .limit(limit)
+
+  if (error) return `Failed to retrieve history: ${error.message}`
+  if (!data || data.length === 0) return "No net worth snapshots found. Use snapshot_net_worth to start tracking."
+
+  const sorted = [...data].reverse()
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  const change = last.net_worth - first.net_worth
+  const trend = change >= 0 ? `+$${Math.round(change * 100) / 100}` : `-$${Math.round(Math.abs(change) * 100) / 100}`
+
+  return JSON.stringify({
+    snapshots: sorted,
+    trend: `${trend} since ${first.snapshot_date}`,
+    count: sorted.length,
+  })
+}
+
+// ── Scenario simulation ───────────────────────────────────────────────────────
+
+async function simulateBudgetChange(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  // Get current income and recurring expenses as baseline
+  const [incomeRes, recurringRes, debtsRes] = await Promise.all([
+    supabase.from("income_sources").select("amount, frequency").eq("user_id", userId).eq("active", true),
+    supabase.from("recurring_expenses").select("name, amount").eq("user_id", userId).eq("active", true),
+    supabase.from("debts").select("name, balance, interest_rate, min_payment").eq("user_id", userId),
+  ])
+
+  const incomes = incomeRes.data ?? []
+  const recurring = recurringRes.data ?? []
+  const debts = debtsRes.data ?? []
+
+  // Convert all income to monthly
+  const currentMonthlyIncome = incomes.reduce((sum, src) => {
+    const amt = Number(src.amount)
+    if (src.frequency === "biweekly") return sum + amt * 26 / 12
+    if (src.frequency === "weekly") return sum + amt * 52 / 12
+    if (src.frequency === "annually") return sum + amt / 12
+    return sum + amt // monthly or one-time
+  }, 0)
+
+  const currentMonthlyExpenses = recurring.reduce((sum, r) => sum + Number(r.amount), 0)
+  const currentCashFlow = currentMonthlyIncome - currentMonthlyExpenses
+  const currentSavingsRate = currentMonthlyIncome > 0 ? (currentCashFlow / currentMonthlyIncome) * 100 : 0
+
+  // Apply changes
+  const incomeChange = Number(input.income_change ?? 0)
+  const expenseChanges = (input.expense_changes as Array<{ category: string; delta: number }>) ?? []
+  const extraDebtPayment = Number(input.extra_debt_payment ?? 0)
+  const months = Number(input.months_to_project ?? 12)
+
+  const newMonthlyIncome = currentMonthlyIncome + incomeChange
+  const totalExpenseDelta = expenseChanges.reduce((sum, c) => sum + c.delta, 0)
+  const newMonthlyExpenses = currentMonthlyExpenses + totalExpenseDelta + extraDebtPayment
+  const newCashFlow = newMonthlyIncome - newMonthlyExpenses
+  const newSavingsRate = newMonthlyIncome > 0 ? (newCashFlow / newMonthlyIncome) * 100 : 0
+
+  // Debt payoff projection for target debt
+  let debtPayoffInfo: Record<string, unknown> | null = null
+  if (extraDebtPayment > 0 && input.target_debt_name) {
+    const targetDebt = debts.find((d) => d.name.toLowerCase().includes((input.target_debt_name as string).toLowerCase()))
+    if (targetDebt) {
+      const balance = Number(targetDebt.balance)
+      const apr = Number(targetDebt.interest_rate ?? 0) / 100 / 12
+      const payment = Number(targetDebt.min_payment ?? 0) + extraDebtPayment
+      const currentPayment = Number(targetDebt.min_payment ?? 0)
+
+      const calcMonths = (bal: number, pmt: number, rate: number) => {
+        if (pmt <= 0) return Infinity
+        if (rate === 0) return Math.ceil(bal / pmt)
+        return Math.ceil(-Math.log(1 - (bal * rate) / pmt) / Math.log(1 + rate))
+      }
+
+      const currentMonthsToPayoff = calcMonths(balance, currentPayment, apr)
+      const newMonthsToPayoff = calcMonths(balance, payment, apr)
+
+      debtPayoffInfo = {
+        debt_name: targetDebt.name,
+        current_payoff_months: isFinite(currentMonthsToPayoff) ? currentMonthsToPayoff : "never (payment too low)",
+        new_payoff_months: isFinite(newMonthsToPayoff) ? newMonthsToPayoff : "never",
+        months_saved: isFinite(currentMonthsToPayoff) && isFinite(newMonthsToPayoff) ? currentMonthsToPayoff - newMonthsToPayoff : "N/A",
+      }
+    }
+  }
+
+  return JSON.stringify({
+    scenario_label: expenseChanges.map((c) => `${c.category} ${c.delta >= 0 ? "+" : ""}$${c.delta}`).join(", ") + (incomeChange !== 0 ? `, income ${incomeChange >= 0 ? "+" : ""}$${incomeChange}` : ""),
+    current: {
+      monthly_income: Math.round(currentMonthlyIncome * 100) / 100,
+      monthly_expenses: Math.round(currentMonthlyExpenses * 100) / 100,
+      cash_flow: Math.round(currentCashFlow * 100) / 100,
+      savings_rate_pct: Math.round(currentSavingsRate * 10) / 10,
+    },
+    projected: {
+      monthly_income: Math.round(newMonthlyIncome * 100) / 100,
+      monthly_expenses: Math.round(newMonthlyExpenses * 100) / 100,
+      cash_flow: Math.round(newCashFlow * 100) / 100,
+      savings_rate_pct: Math.round(newSavingsRate * 10) / 10,
+      cash_flow_change: Math.round((newCashFlow - currentCashFlow) * 100) / 100,
+      over_months: Math.round(newCashFlow * months * 100) / 100,
+    },
+    expense_changes: expenseChanges,
+    debt_payoff: debtPayoffInfo,
+    months_projected: months,
+  })
+}
+
+// ── Withholding calculator ────────────────────────────────────────────────────
+
+async function calculateWithholdingAdjustment(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const paychecksRemaining = Number(input.paychecks_remaining)
+  const currentWithholdingPerCheck = Number(input.current_withholding_per_check)
+  const filingStatus = (input.filing_status as string) ?? "single"
+  const targetRefund = Number(input.target_refund ?? 0)
+
+  let grossIncome = 0
+  let totalWithheld = 0
+
+  if (input.use_stored_tax_data !== false) {
+    const { data: taxItems } = await supabase.from("tax_items").select("*").eq("user_id", userId)
+    for (const item of taxItems ?? []) {
+      if (item.type === "income") grossIncome += Number(item.amount)
+      if (item.type === "payment" && (item.category === "federal" || (item.form_source ?? "").includes("W-2"))) {
+        totalWithheld += Number(item.amount)
+      }
+    }
+  }
+
+  if (input.override_gross_income != null) grossIncome = Number(input.override_gross_income)
+  if (input.override_total_withheld != null) totalWithheld = Number(input.override_total_withheld)
+
+  if (grossIncome === 0) return "Could not determine gross income. Please provide override_gross_income or ensure tax items are recorded with type='income'."
+
+  // 2025 federal tax brackets (standard deduction already applied concept)
+  const standardDeduction = filingStatus === "married_jointly" ? 30000 : 15000
+  const taxableIncome = Math.max(0, grossIncome - standardDeduction)
+
+  // 2025 single brackets
+  const brackets2025Single = [
+    { min: 0, max: 11925, rate: 0.10 },
+    { min: 11925, max: 48475, rate: 0.12 },
+    { min: 48475, max: 103350, rate: 0.22 },
+    { min: 103350, max: 197300, rate: 0.24 },
+    { min: 197300, max: 250525, rate: 0.32 },
+    { min: 250525, max: 626350, rate: 0.35 },
+    { min: 626350, max: Infinity, rate: 0.37 },
+  ]
+  const brackets2025MFJ = [
+    { min: 0, max: 23850, rate: 0.10 },
+    { min: 23850, max: 96950, rate: 0.12 },
+    { min: 96950, max: 206700, rate: 0.22 },
+    { min: 206700, max: 394600, rate: 0.24 },
+    { min: 394600, max: 501050, rate: 0.32 },
+    { min: 501050, max: 751600, rate: 0.35 },
+    { min: 751600, max: Infinity, rate: 0.37 },
+  ]
+
+  const brackets = filingStatus === "married_jointly" ? brackets2025MFJ : brackets2025Single
+
+  let estimatedTax = 0
+  for (const bracket of brackets) {
+    if (taxableIncome <= bracket.min) break
+    const taxable = Math.min(taxableIncome, bracket.max) - bracket.min
+    estimatedTax += taxable * bracket.rate
+  }
+
+  const gap = estimatedTax - totalWithheld + targetRefund
+  const additionalPerCheck = paychecksRemaining > 0 ? gap / paychecksRemaining : 0
+
+  const recommendation = additionalPerCheck > 0
+    ? `Increase federal withholding by $${Math.ceil(additionalPerCheck)} per paycheck to ${targetRefund > 0 ? `get a $${targetRefund} refund` : "break even"}.`
+    : additionalPerCheck < 0
+    ? `You are over-withheld by $${Math.round(Math.abs(gap))} — expect a refund of approximately $${Math.round(Math.abs(gap) - targetRefund)} at current pace.`
+    : "Your withholding is on track to break even."
+
+  return JSON.stringify({
+    gross_income_ytd: Math.round(grossIncome * 100) / 100,
+    standard_deduction: standardDeduction,
+    taxable_income: Math.round(taxableIncome * 100) / 100,
+    estimated_tax_liability: Math.round(estimatedTax * 100) / 100,
+    total_withheld_ytd: Math.round(totalWithheld * 100) / 100,
+    gap: Math.round(gap * 100) / 100,
+    paychecks_remaining: paychecksRemaining,
+    additional_per_check: Math.ceil(additionalPerCheck * 100) / 100,
+    recommendation,
+    note: "Uses 2025 federal brackets + standard deduction. Does not include FICA, state, or itemized deductions.",
+  })
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+
+async function createAlert(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const type = String(input.type ?? "custom")
+  const title = String(input.title ?? "").trim().slice(0, 60)
+  const message = String(input.message ?? "").trim()
+  const severity = String(input.severity ?? "info")
+  const dueDate = (input.due_date as string) ?? null
+  const expiresAt = (input.expires_at as string) ?? null
+
+  if (!title || !message) return "Title and message are required."
+
+  // Check for recent duplicate of same type (within 24h)
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: existing } = await (supabase as any)
+    .from("alerts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("type", type)
+    .eq("is_read", false)
+    .gte("created_at", oneDayAgo)
+    .limit(1)
+
+  if (existing && existing.length > 0) {
+    return `Alert of type "${type}" already exists from the last 24 hours (ID: ${existing[0].id}). Use dismiss_alert first or update the existing one.`
+  }
+
+  const { data, error } = await (supabase as any)
+    .from("alerts")
+    .insert({ user_id: userId, type, title, message, severity, is_read: false, due_date: dueDate, expires_at: expiresAt })
+    .select()
+    .single()
+
+  if (error || !data) return `Failed to create alert: ${error?.message}`
+  return `Alert created: [${severity.toUpperCase()}] "${title}" — ID: ${data.id}`
+}
+
+async function getAlerts(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const includeRead = Boolean(input.include_read ?? false)
+  const now = new Date().toISOString()
+
+  let q = (supabase as any)
+    .from("alerts")
+    .select("*")
+    .eq("user_id", userId)
+    .or(`expires_at.is.null,expires_at.gt.${now}`)
+    .order("created_at", { ascending: false })
+    .limit(20)
+
+  if (!includeRead) q = q.eq("is_read", false)
+
+  const { data, error } = await q
+  if (error) return `Failed to get alerts: ${error.message}`
+  if (!data || data.length === 0) return "No active alerts."
+
+  return JSON.stringify({ count: data.length, alerts: data })
+}
+
+async function dismissAlert(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const alertId = String(input.alert_id ?? "")
+  if (!alertId) return "alert_id is required."
+
+  const { error } = await (supabase as any)
+    .from("alerts")
+    .update({ is_read: true })
+    .eq("id", alertId)
+    .eq("user_id", userId)
+
+  if (error) return `Failed to dismiss alert: ${error.message}`
+  return `Alert ${alertId} dismissed.`
 }

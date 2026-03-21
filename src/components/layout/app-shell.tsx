@@ -2,11 +2,13 @@
 
 import Link from "next/link"
 import { useTheme } from "next-themes"
-import { Sun, Moon } from "lucide-react"
+import { Sun, Moon, Bell, X } from "lucide-react"
 import { useUser } from "@/hooks/use-user"
+import { useAlerts } from "@/hooks/use-alerts"
 import { AppSidebar } from "./app-sidebar"
 import { MobileNav } from "./mobile-nav"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { APP_NAME } from "@/lib/app-config"
 
 function getInitials(name: string | null | undefined): string {
@@ -26,6 +28,7 @@ interface AppShellProps {
 export function AppShell({ children, initialProfile }: AppShellProps) {
   const { profile, roleOverride } = useUser(initialProfile)
   const { theme, setTheme } = useTheme()
+  const { alerts, unreadCount, dismiss } = useAlerts()
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -47,6 +50,59 @@ export function AppShell({ children, initialProfile }: AppShellProps) {
           </Link>
           <div className="hidden md:block" />
           <div className="flex items-center gap-1.5 md:gap-3">
+            {/* Alert bell */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  aria-label="Notifications"
+                  className="relative !size-8 !min-h-0 sm:!size-auto sm:!min-h-[unset] size-8 md:size-9 rounded-full flex items-center justify-center transition-colors text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent md:text-muted-foreground md:hover:text-foreground md:hover:bg-accent"
+                >
+                  <Bell className="size-[18px]" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center leading-none">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <div className="p-3 border-b">
+                  <p className="text-sm font-semibold">Notifications</p>
+                  {unreadCount === 0 && <p className="text-xs text-muted-foreground mt-0.5">All clear</p>}
+                </div>
+                {alerts.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">No active alerts</div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto divide-y">
+                    {alerts.map((alert) => (
+                      <div key={alert.id} className="p-3 flex gap-2.5 items-start">
+                        <span
+                          className={`mt-0.5 shrink-0 size-2 rounded-full ${
+                            alert.severity === "critical" ? "bg-destructive" :
+                            alert.severity === "warning" ? "bg-yellow-500" :
+                            "bg-blue-500"
+                          }`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-tight">{alert.title}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{alert.message}</p>
+                          {alert.due_date && (
+                            <p className="text-xs text-muted-foreground mt-0.5">Due: {alert.due_date}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => dismiss(alert.id)}
+                          aria-label="Dismiss"
+                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               aria-label="Toggle dark mode"
