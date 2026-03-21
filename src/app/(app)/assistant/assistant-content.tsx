@@ -49,11 +49,34 @@ export function AssistantContent({ userName }: AssistantContentProps) {
   const [sessionsOpen, setSessionsOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const userScrolledUpRef = useRef(false)
+  const lastMessageCountRef = useRef(0)
+
+  // Track whether user has manually scrolled away from bottom
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      // Consider "at bottom" if within 80px
+      userScrolledUpRef.current = distFromBottom > 80
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    const newMessageArrived = messages.length > lastMessageCountRef.current
+    lastMessageCountRef.current = messages.length
+
+    // Always scroll on a new message (user sent or assistant started responding)
+    // Only follow streaming if user hasn't scrolled up
+    if (newMessageArrived || !userScrolledUpRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: newMessageArrived ? "smooth" : "instant" })
+    }
   }, [messages, activeTools])
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -129,6 +152,8 @@ export function AssistantContent({ userName }: AssistantContentProps) {
     setInput("")
     setAttachments([])
     setCsvAttachments([])
+    // Reset scroll lock so we follow the new response from the start
+    userScrolledUpRef.current = false
     await sendMessage(text, imgs, csvs)
   }, [input, attachments, csvAttachments, isStreaming, sendMessage])
 
@@ -274,7 +299,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
         ) : (
           /* ── Active chat ── */
           <>
-            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} userAvatarUrl={userAvatarUrl} />
               ))}

@@ -41,6 +41,45 @@ export type Database = {
         }
         Relationships: []
       }
+      alerts: {
+        Row: {
+          created_at: string
+          due_date: string | null
+          expires_at: string | null
+          id: string
+          is_read: boolean
+          message: string
+          severity: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          due_date?: string | null
+          expires_at?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          severity: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          due_date?: string | null
+          expires_at?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          severity?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       asana_connections: {
         Row: {
           access_token_enc: string
@@ -121,44 +160,6 @@ export type Database = {
           },
         ]
       }
-      business_engagements: {
-        Row: {
-          id: string
-          user_id: string
-          client: string
-          description: string | null
-          date: string
-          amount: number
-          tax_rate: number
-          taxes_owed: number | null
-          revenue: number | null
-          status: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          client: string
-          description?: string | null
-          date: string
-          amount?: number
-          tax_rate?: number
-          status?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          client?: string
-          description?: string | null
-          date?: string
-          amount?: number
-          tax_rate?: number
-          status?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
       budget_sections: {
         Row: {
           created_at: string | null
@@ -192,6 +193,7 @@ export type Database = {
           monthly_limit: number
           position: number
           section_id: string | null
+          user_id: string
           year: number
         }
         Insert: {
@@ -202,6 +204,7 @@ export type Database = {
           monthly_limit: number
           position?: number
           section_id?: string | null
+          user_id: string
           year: number
         }
         Update: {
@@ -212,6 +215,7 @@ export type Database = {
           monthly_limit?: number
           position?: number
           section_id?: string | null
+          user_id?: string
           year?: number
         }
         Relationships: [
@@ -223,6 +227,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      business_engagements: {
+        Row: {
+          amount: number
+          client: string
+          created_at: string
+          date: string
+          deductions: number | null
+          description: string | null
+          id: string
+          revenue: number | null
+          status: string
+          tax_rate: number
+          taxes_owed: number | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          client: string
+          created_at?: string
+          date: string
+          deductions?: number | null
+          description?: string | null
+          id?: string
+          revenue?: number | null
+          status?: string
+          tax_rate?: number
+          taxes_owed?: number | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          client?: string
+          created_at?: string
+          date?: string
+          deductions?: number | null
+          description?: string | null
+          id?: string
+          revenue?: number | null
+          status?: string
+          tax_rate?: number
+          taxes_owed?: number | null
+          user_id?: string
+        }
+        Relationships: []
       }
       calendar_events: {
         Row: {
@@ -329,6 +378,135 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_accounts: {
+        Row: {
+          balance: number
+          created_at: string
+          credit_limit: number | null
+          id: string
+          lender: string | null
+          name: string
+          notes: string | null
+          opened_date: string | null
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          credit_limit?: number | null
+          id?: string
+          lender?: string | null
+          name: string
+          notes?: string | null
+          opened_date?: string | null
+          status?: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          credit_limit?: number | null
+          id?: string
+          lender?: string | null
+          name?: string
+          notes?: string | null
+          opened_date?: string | null
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_profile: {
+        Row: {
+          created_at: string
+          credit_age_months: number | null
+          credit_age_rating: string | null
+          credit_age_years: number | null
+          credit_card_use_pct: number | null
+          credit_card_use_rating: string | null
+          derogatory_marks: number | null
+          derogatory_marks_rating: string | null
+          hard_inquiries: number | null
+          hard_inquiries_rating: string | null
+          id: string
+          last_updated: string | null
+          payment_history_pct: number | null
+          payment_history_rating: string | null
+          score: number | null
+          score_source: string | null
+          total_accounts: number | null
+          total_accounts_rating: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credit_age_months?: number | null
+          credit_age_rating?: string | null
+          credit_age_years?: number | null
+          credit_card_use_pct?: number | null
+          credit_card_use_rating?: string | null
+          derogatory_marks?: number | null
+          derogatory_marks_rating?: string | null
+          hard_inquiries?: number | null
+          hard_inquiries_rating?: string | null
+          id?: string
+          last_updated?: string | null
+          payment_history_pct?: number | null
+          payment_history_rating?: string | null
+          score?: number | null
+          score_source?: string | null
+          total_accounts?: number | null
+          total_accounts_rating?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credit_age_months?: number | null
+          credit_age_rating?: string | null
+          credit_age_years?: number | null
+          credit_card_use_pct?: number | null
+          credit_card_use_rating?: string | null
+          derogatory_marks?: number | null
+          derogatory_marks_rating?: string | null
+          hard_inquiries?: number | null
+          hard_inquiries_rating?: string | null
+          id?: string
+          last_updated?: string | null
+          payment_history_pct?: number | null
+          payment_history_rating?: string | null
+          score?: number | null
+          score_source?: string | null
+          total_accounts?: number | null
+          total_accounts_rating?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      data_freshness: {
+        Row: {
+          id: string
+          last_updated: string
+          section: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          last_updated?: string
+          section: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          last_updated?: string
+          section?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       debt_sections: {
         Row: {
           created_at: string | null
@@ -357,6 +535,7 @@ export type Database = {
         Row: {
           balance: number
           created_at: string
+          employer_contribution: number | null
           id: string
           interest_rate: number | null
           min_payment: number | null
@@ -365,10 +544,13 @@ export type Database = {
           payoff_date: string | null
           position: number
           section_id: string | null
+          status: string | null
+          user_id: string
         }
         Insert: {
           balance?: number
           created_at?: string
+          employer_contribution?: number | null
           id?: string
           interest_rate?: number | null
           min_payment?: number | null
@@ -377,10 +559,13 @@ export type Database = {
           payoff_date?: string | null
           position?: number
           section_id?: string | null
+          status?: string | null
+          user_id: string
         }
         Update: {
           balance?: number
           created_at?: string
+          employer_contribution?: number | null
           id?: string
           interest_rate?: number | null
           min_payment?: number | null
@@ -389,6 +574,8 @@ export type Database = {
           payoff_date?: string | null
           position?: number
           section_id?: string | null
+          status?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -533,6 +720,7 @@ export type Database = {
           bonus_amount: number | null
           bonus_frequency: string | null
           created_at: string
+          deductions: number | null
           frequency: string
           gross_amount: number | null
           id: string
@@ -546,6 +734,7 @@ export type Database = {
           bonus_amount?: number | null
           bonus_frequency?: string | null
           created_at?: string
+          deductions?: number | null
           frequency: string
           gross_amount?: number | null
           id?: string
@@ -559,6 +748,7 @@ export type Database = {
           bonus_amount?: number | null
           bonus_frequency?: string | null
           created_at?: string
+          deductions?: number | null
           frequency?: string
           gross_amount?: number | null
           id?: string
@@ -578,6 +768,7 @@ export type Database = {
           provider: string | null
           renewal_date: string | null
           type: string
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -588,6 +779,7 @@ export type Database = {
           provider?: string | null
           renewal_date?: string | null
           type: string
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -598,6 +790,7 @@ export type Database = {
           provider?: string | null
           renewal_date?: string | null
           type?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -687,6 +880,69 @@ export type Database = {
           },
         ]
       }
+      knowledge_docs: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      net_worth_snapshots: {
+        Row: {
+          assets: number
+          breakdown: Json | null
+          created_at: string
+          id: string
+          liabilities: number
+          net_worth: number
+          snapshot_date: string
+          user_id: string
+        }
+        Insert: {
+          assets: number
+          breakdown?: Json | null
+          created_at?: string
+          id?: string
+          liabilities: number
+          net_worth: number
+          snapshot_date: string
+          user_id: string
+        }
+        Update: {
+          assets?: number
+          breakdown?: Json | null
+          created_at?: string
+          id?: string
+          liabilities?: number
+          net_worth?: number
+          snapshot_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pantry_log: {
         Row: {
           action: string
@@ -724,6 +980,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      plaid_accounts: {
+        Row: {
+          available_balance: number | null
+          created_at: string | null
+          current_balance: number | null
+          id: string
+          iso_currency_code: string | null
+          item_id: string
+          limit_balance: number | null
+          mask: string | null
+          name: string
+          official_name: string | null
+          plaid_account_id: string
+          subtype: string | null
+          type: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          available_balance?: number | null
+          created_at?: string | null
+          current_balance?: number | null
+          id?: string
+          iso_currency_code?: string | null
+          item_id: string
+          limit_balance?: number | null
+          mask?: string | null
+          name: string
+          official_name?: string | null
+          plaid_account_id: string
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          available_balance?: number | null
+          created_at?: string | null
+          current_balance?: number | null
+          id?: string
+          iso_currency_code?: string | null
+          item_id?: string
+          limit_balance?: number | null
+          mask?: string | null
+          name?: string
+          official_name?: string | null
+          plaid_account_id?: string
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_accounts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "plaid_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plaid_items: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          cursor: string | null
+          id: string
+          institution_id: string | null
+          institution_name: string | null
+          item_id: string
+          last_synced_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          cursor?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_name?: string | null
+          item_id: string
+          last_synced_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          cursor?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_name?: string | null
+          item_id?: string
+          last_synced_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -821,9 +1175,11 @@ export type Database = {
       tax_items: {
         Row: {
           amount: number
+          category: string | null
           created_at: string | null
           due_date: string | null
           filed: boolean
+          form_source: string | null
           id: string
           name: string
           notes: string | null
@@ -835,9 +1191,11 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          category?: string | null
           created_at?: string | null
           due_date?: string | null
           filed?: boolean
+          form_source?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -849,9 +1207,11 @@ export type Database = {
         }
         Update: {
           amount?: number
+          category?: string | null
           created_at?: string | null
           due_date?: string | null
           filed?: boolean
+          form_source?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -904,7 +1264,10 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          plaid_account_id: string | null
+          plaid_transaction_id: string | null
           receipt_url: string | null
+          scope: string
           type: string
           user_id: string
         }
@@ -916,7 +1279,10 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          plaid_account_id?: string | null
+          plaid_transaction_id?: string | null
           receipt_url?: string | null
+          scope?: string
           type: string
           user_id: string
         }
@@ -928,7 +1294,10 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          plaid_account_id?: string | null
+          plaid_transaction_id?: string | null
           receipt_url?: string | null
+          scope?: string
           type?: string
           user_id?: string
         }
@@ -941,6 +1310,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_notes: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
