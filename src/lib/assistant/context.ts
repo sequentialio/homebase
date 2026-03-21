@@ -40,6 +40,7 @@ export async function buildContext(
     knowledgeRes,
     nwHistoryRes,
     alertsRes,
+    systemDocsRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
@@ -113,7 +114,14 @@ export async function buildContext(
       .from("knowledge_docs")
       .select("id, title, category")
       .eq("user_id", userId)
+      .neq("category", "System")
       .order("category"),
+    (supabase as any)
+      .from("knowledge_docs")
+      .select("id, title, content, updated_at")
+      .eq("user_id", userId)
+      .eq("category", "System")
+      .order("updated_at", { ascending: false }),
     (supabase as any)
       .from("net_worth_snapshots")
       .select("snapshot_date, net_worth")
@@ -428,6 +436,18 @@ export async function buildContext(
       lines.push(`- ${a.name} (${a.type}): $${Number(a.balance).toFixed(2)}${limit}${util} [${a.status}]`)
     }
     lines.push("")
+  }
+
+  // System knowledge docs — loaded in full every conversation
+  const systemDocs = systemDocsRes?.data as Array<{ id: string; title: string; content: string; updated_at: string }> | null
+  if (systemDocs?.length) {
+    for (const doc of systemDocs) {
+      lines.push(`## [System Doc] ${doc.title} [id: ${doc.id}]`)
+      lines.push(`*Last updated: ${new Date(doc.updated_at).toLocaleDateString()}*`)
+      lines.push("")
+      lines.push(doc.content)
+      lines.push("")
+    }
   }
 
   // Knowledge base (titles only — use search_knowledge_base/read_document to access content)
