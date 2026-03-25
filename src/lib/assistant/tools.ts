@@ -246,6 +246,29 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: "bulk_update_account_balances",
+    description:
+      "Update multiple bank account balances at once. Use when the user shares a screenshot or statement showing several account balances. Much more efficient than calling upsert_account repeatedly.",
+    input_schema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          description: "Array of account updates",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Account ID from get_finances (required)" },
+              balance: { type: "number", description: "New balance in dollars" },
+            },
+            required: ["id", "balance"],
+          },
+        },
+      },
+      required: ["updates"],
+    },
+  },
+  {
     name: "upsert_income_source",
     description:
       "Add a new income source or update an existing one. Use when the user mentions salary, freelance income, or any recurring income. If updating, provide the id from get_finances. Amount is the NET (take-home) per pay period.",
@@ -971,6 +994,9 @@ export async function executeTool(
       case "upsert_account":
         return await upsertAccount(supabase, userId, input)
 
+      case "bulk_update_account_balances":
+        return await bulkUpdateAccountBalances(supabase, userId, input)
+
       case "upsert_income_source":
         return await upsertIncomeSource(supabase, userId, input)
 
@@ -1465,6 +1491,29 @@ async function upsertAccount(
     if (error) return `Failed to add account: ${error.message}`
     return `Account added: "${data.name}" — balance $${data.balance}`
   }
+}
+
+async function bulkUpdateAccountBalances(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const updates = input.updates as Array<{ id: string; balance: number }>
+  if (!updates?.length) return "No updates provided."
+  const now = new Date().toISOString().split("T")[0]
+  const results: string[] = []
+  for (const u of updates) {
+    const { error, data } = await supabase
+      .from("bank_accounts")
+      .update({ balance: Number(u.balance), last_updated: now })
+      .eq("id", u.id)
+      .eq("user_id", userId)
+      .select("name, balance")
+      .single()
+    if (error) results.push(`❌ ID ${u.id}: ${error.message}`)
+    else results.push(`${data.name}: $${data.balance}`)
+  }
+  return `Updated ${results.filter(r => !r.startsWith("❌")).length}/${updates.length} accounts:\n${results.join("\n")}`
 }
 
 async function upsertIncomeSource(
