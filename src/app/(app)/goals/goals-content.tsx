@@ -49,6 +49,7 @@ type Goal = {
   category: string
   target_amount: number | null
   current_amount: number | null
+  goal_type: "increase" | "decrease"
   target_date: string | null
   status: "active" | "achieved" | "paused"
   priority: "high" | "medium" | "low"
@@ -110,6 +111,7 @@ const blankGoal = (): Partial<Goal> => ({
   title: "",
   description: "",
   category: "Financial",
+  goal_type: "increase",
   target_amount: undefined,
   current_amount: 0,
   target_date: undefined,
@@ -135,7 +137,14 @@ function GoalCard({
   const hasAmount = goal.target_amount != null && goal.target_amount > 0
   const current = Number(goal.current_amount ?? 0)
   const target = Number(goal.target_amount ?? 1)
-  const pct = hasAmount ? Math.min((current / target) * 100, 100) : 0
+  const isDecrease = goal.goal_type === "decrease"
+  // Decrease goals: progress = how much you've reduced from target toward 0
+  // e.g. debt $15k target, $10k current = 33% paid off
+  const pct = hasAmount
+    ? isDecrease
+      ? Math.min(Math.max(((target - current) / target) * 100, 0), 100)
+      : Math.min((current / target) * 100, 100)
+    : 0
   const isAchieved = goal.status === "achieved"
   const isPaused = goal.status === "paused"
 
@@ -197,9 +206,9 @@ function GoalCard({
       {hasAmount && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Progress</span>
+            <span className="text-muted-foreground">{isDecrease ? "Remaining" : "Progress"}</span>
             <span className="font-medium">
-              {fmt(current)} <span className="text-muted-foreground">/ {fmt(target)}</span>
+              {fmt(current)} <span className="text-muted-foreground">/ {fmt(target)}{isDecrease ? " start" : ""}</span>
             </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2">
@@ -212,7 +221,7 @@ function GoalCard({
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">{Math.round(pct)}% complete</span>
+            <span className="text-xs text-muted-foreground">{Math.round(pct)}% {isDecrease ? "paid off" : "complete"}</span>
             {!isAchieved && (
               <div className="flex items-center gap-1">
                 <Button
@@ -344,13 +353,23 @@ function GoalDialog({
               onChange={(e) => set("description", e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Category</Label>
               <Select value={form.category ?? "Financial"} onValueChange={(v) => set("category", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {GOAL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={form.goal_type ?? "increase"} onValueChange={(v) => set("goal_type", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -455,12 +474,6 @@ export function GoalsContent({
 
   const activeCount = goals.filter((g) => g.status === "active").length
   const achievedCount = goals.filter((g) => g.status === "achieved").length
-  const totalTargetAmount = goals
-    .filter((g) => g.status === "active" && g.target_amount)
-    .reduce((s, g) => s + Number(g.target_amount), 0)
-  const totalCurrentAmount = goals
-    .filter((g) => g.status === "active" && g.target_amount)
-    .reduce((s, g) => s + Number(g.current_amount ?? 0), 0)
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
 
@@ -470,6 +483,7 @@ export function GoalsContent({
       title: form.title!.trim(),
       description: form.description?.trim() || null,
       category: form.category ?? "Financial",
+      goal_type: form.goal_type ?? "increase",
       target_amount: form.target_amount ?? null,
       current_amount: form.current_amount ?? 0,
       target_date: form.target_date ?? null,
@@ -549,7 +563,7 @@ export function GoalsContent({
 
       {/* ── Stats row ───────────────────────────────────────────────────────── */}
       {goals.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 max-w-sm">
           <div className="rounded-lg border p-3 space-y-0.5">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Active</p>
             <p className="text-xl font-bold">{activeCount}</p>
@@ -558,18 +572,6 @@ export function GoalsContent({
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Achieved</p>
             <p className="text-xl font-bold text-green-500">{achievedCount}</p>
           </div>
-          {totalTargetAmount > 0 && (
-            <>
-              <div className="rounded-lg border p-3 space-y-0.5">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Saved</p>
-                <p className="text-xl font-bold text-[var(--brand-lime)]">{fmt(totalCurrentAmount)}</p>
-              </div>
-              <div className="rounded-lg border p-3 space-y-0.5">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Target</p>
-                <p className="text-xl font-bold">{fmt(totalTargetAmount)}</p>
-              </div>
-            </>
-          )}
         </div>
       )}
 
