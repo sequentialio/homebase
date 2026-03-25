@@ -18,25 +18,31 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { Tables } from "@/types/database"
-import { TasksContent } from "@/app/(app)/tasks/tasks-content"
-
-type CalendarEvent = Tables<"calendar_events">
+type CalendarEvent = Tables<"calendar_events"> & { category?: string | null; is_life_event?: boolean | null }
 type View = "month" | "week" | "3day"
-
-interface AsanaTask {
-  gid: string
-  name: string
-  due_on: string
-  completed: boolean
-  permalink_url?: string
-}
 
 interface CleaningDuty {
   id: string
   name: string
   next_due: string | null
+}
+
+interface SharedListItem {
+  id: string
+  title: string
+  due_date: string
+  checked: boolean
+  list_id: string
+  shared_lists: { name: string } | null
 }
 
 interface GoogleEvent {
@@ -48,8 +54,27 @@ interface GoogleEvent {
   htmlLink: string | null
 }
 
+const EVENT_CATEGORIES = [
+  { value: "travel", label: "✈️ Travel", color: "bg-sky-500", border: "border-l-sky-500 bg-sky-500/10" },
+  { value: "concert", label: "🎵 Concert", color: "bg-pink-500", border: "border-l-pink-500 bg-pink-500/10" },
+  { value: "outdoors", label: "🏕️ Outdoors", color: "bg-emerald-500", border: "border-l-emerald-500 bg-emerald-500/10" },
+  { value: "social", label: "🍕 Social", color: "bg-amber-500", border: "border-l-amber-500 bg-amber-500/10" },
+  { value: "appointment", label: "📋 Appointment", color: "bg-blue-500", border: "border-l-blue-500 bg-blue-500/10" },
+  { value: "birthday", label: "🎂 Birthday", color: "bg-fuchsia-500", border: "border-l-fuchsia-500 bg-fuchsia-500/10" },
+  { value: "holiday", label: "🎄 Holiday", color: "bg-red-500", border: "border-l-red-500 bg-red-500/10" },
+  { value: "sport", label: "⚽ Sport", color: "bg-teal-500", border: "border-l-teal-500 bg-teal-500/10" },
+  { value: "other", label: "📌 Other", color: "bg-slate-500", border: "border-l-slate-500 bg-slate-500/10" },
+] as const
+
+type EventCategory = (typeof EVENT_CATEGORIES)[number]["value"]
+
+function getCategoryStyle(category?: string | null) {
+  const cat = EVENT_CATEGORIES.find(c => c.value === category)
+  return cat ?? null
+}
+
 interface CalendarEntry {
-  type: "homebase" | "asana" | "cleaning" | "google"
+  type: "homebase" | "cleaning" | "google" | "shared_list"
   id?: string
   title: string
   url?: string
@@ -58,13 +83,14 @@ interface CalendarEntry {
   startMinute?: number
   endHour?: number
   endMinute?: number
+  category?: string | null
 }
 
 interface CalendarContentProps {
   userId: string
   initialEvents: CalendarEvent[]
   cleaningDuties: CleaningDuty[]
-  hasAsana: boolean
+  sharedListItems: SharedListItem[]
   hasGoogle: boolean
 }
 
@@ -128,28 +154,29 @@ const schema = z.object({
   end_at: z.string().optional(),
   all_day: z.boolean(),
   description: z.string().optional(),
+  category: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
 const TYPE_COLOR: Record<CalendarEntry["type"], string> = {
   homebase: "bg-primary",
-  asana: "bg-blue-500",
   google: "bg-red-500",
   cleaning: "bg-orange-500",
+  shared_list: "bg-purple-500",
 }
 
 const TYPE_COLOR_BORDER: Record<CalendarEntry["type"], string> = {
   homebase: "border-l-primary bg-primary/10",
-  asana: "border-l-blue-500 bg-blue-500/10",
   google: "border-l-red-500 bg-red-500/10",
   cleaning: "border-l-orange-500 bg-orange-500/10",
+  shared_list: "border-l-purple-500 bg-purple-500/10",
 }
 
 export function CalendarContent({
   userId,
   initialEvents,
   cleaningDuties,
-  hasAsana,
+  sharedListItems,
   hasGoogle,
 }: CalendarContentProps) {
   const supabase = useMemo(() => createClient(), [])
@@ -162,9 +189,7 @@ export function CalendarContent({
   const [viewDate, setViewDate] = useState(now)
 
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents)
-  const [asanaTasks, setAsanaTasks] = useState<AsanaTask[]>([])
   const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([])
-  const [asanaLoading, setAsanaLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -190,18 +215,6 @@ export function CalendarContent({
       }
     }
   }, [viewDate, view, year, month])
-
-  // Fetch Asana tasks when month changes
-  useEffect(() => {
-    if (!hasAsana) return
-    setAsanaLoading(true)
-    const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`
-    fetch(`/api/asana/tasks/calendar?month=${monthStr}`)
-      .then((r) => r.json())
-      .then((d) => setAsanaTasks(d.tasks ?? []))
-      .catch(() => setAsanaTasks([]))
-      .finally(() => setAsanaLoading(false))
-  }, [year, month, hasAsana])
 
   // Fetch Google Calendar events when month changes
   useEffect(() => {
@@ -234,28 +247,30 @@ export function CalendarContent({
 
     // Mita events
     events.forEach((e) => {
-      const d = new Date(e.start_at)
-      const key = dateKey(d)
       const allDay = e.all_day ?? true
+      // For all-day events, extract date directly from ISO string to avoid UTC→local timezone shift
+      // e.g. "2026-03-28T00:00:00+00" → "2026-03-28" (not March 27 in PDT)
+      const key = allDay ? e.start_at.slice(0, 10) : dateKey(new Date(e.start_at))
+      const d = allDay ? null : new Date(e.start_at)
       add(key, {
         type: "homebase",
         id: e.id,
         title: e.title,
         allDay,
-        startHour: allDay ? undefined : d.getHours(),
-        startMinute: allDay ? undefined : d.getMinutes(),
+        startHour: (d && !allDay) ? d.getHours() : undefined,
+        startMinute: (d && !allDay) ? d.getMinutes() : undefined,
         endHour: (!allDay && e.end_at) ? new Date(e.end_at).getHours() : undefined,
         endMinute: (!allDay && e.end_at) ? new Date(e.end_at).getMinutes() : undefined,
+        category: e.category,
       })
     })
 
-    // Asana tasks (all-day)
-    asanaTasks.forEach((t) => {
-      if (!t.due_on) return
-      add(t.due_on, {
-        type: "asana",
-        title: t.name,
-        url: t.permalink_url,
+    // Shared list items (all-day)
+    sharedListItems.forEach((item) => {
+      if (!item.due_date || item.checked) return
+      add(item.due_date, {
+        type: "shared_list",
+        title: `${item.shared_lists?.name ?? "List"}: ${item.title}`,
         allDay: true,
       })
     })
@@ -289,7 +304,7 @@ export function CalendarContent({
     })
 
     return map
-  }, [events, asanaTasks, googleEvents, cleaningDuties])
+  }, [events, sharedListItems, googleEvents, cleaningDuties])
 
   // Navigation
   function navigate(dir: -1 | 1) {
@@ -368,7 +383,7 @@ export function CalendarContent({
     setAddDate(dateStr)
     setDialogMode("add")
     setEditingEventId(null)
-    form.reset({ title: "", start_at: `${dateStr}T00:00`, all_day: true, description: "" })
+    form.reset({ title: "", start_at: `${dateStr}T00:00`, all_day: true, description: "", category: "" })
     setDialogOpen(true)
   }
 
@@ -386,20 +401,23 @@ export function CalendarContent({
       end_at: event.end_at ? event.end_at.slice(0, 16) : "",
       all_day: allDay,
       description: event.description ?? "",
+      category: event.category ?? "",
     })
     setDialogOpen(true)
   }
 
   async function onSubmit(values: FormValues) {
     if (dialogMode === "edit" && editingEventId) {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("calendar_events")
         .update({
           title: values.title,
-          start_at: values.all_day ? `${addDate}T00:00:00Z` : values.start_at,
+          start_at: values.all_day ? `${addDate}T12:00:00Z` : values.start_at,
           end_at: values.end_at || null,
           all_day: values.all_day,
           description: values.description || null,
+          category: values.category || null,
+          is_life_event: !!values.category,
         })
         .eq("id", editingEventId)
         .select()
@@ -411,16 +429,18 @@ export function CalendarContent({
       return
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("calendar_events")
       .insert({
         user_id: userId,
         title: values.title,
-        start_at: values.all_day ? `${addDate}T00:00:00Z` : values.start_at,
+        start_at: values.all_day ? `${addDate}T12:00:00Z` : values.start_at,
         end_at: values.end_at || null,
         all_day: values.all_day,
         description: values.description || null,
         source: "homebase",
+        category: values.category || null,
+        is_life_event: !!values.category,
       })
       .select()
       .single()
@@ -451,7 +471,7 @@ export function CalendarContent({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Calendar</h1>
         <div className="flex items-center gap-2">
-          {(asanaLoading || googleLoading) && (
+          {googleLoading && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="size-3 animate-spin" /> Syncing
             </div>
@@ -509,9 +529,9 @@ export function CalendarContent({
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary inline-block" /> Mita</span>
-        {hasAsana && <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" /> Asana</span>}
         {hasGoogle && <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-500 inline-block" /> Google</span>}
         <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-orange-500 inline-block" /> Cleaning</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-purple-500 inline-block" /> Shared List</span>
       </div>
 
       {/* ─── MONTH VIEW ─── */}
@@ -567,9 +587,12 @@ export function CalendarContent({
                       )}
                     </div>
                     <div className="flex flex-wrap gap-0.5">
-                      {dayEvts.slice(0, 3).map((evt, idx) => (
-                        <span key={idx} className={cn("size-1.5 rounded-full shrink-0", TYPE_COLOR[evt.type])} />
-                      ))}
+                      {dayEvts.slice(0, 3).map((evt, idx) => {
+                        const catStyle = evt.type === "homebase" ? getCategoryStyle(evt.category) : null
+                        return (
+                          <span key={idx} className={cn("size-1.5 rounded-full shrink-0", catStyle?.color ?? TYPE_COLOR[evt.type])} />
+                        )
+                      })}
                       {dayEvts.length > 3 && (
                         <span className="text-[9px] text-muted-foreground leading-none self-center">
                           +{dayEvts.length - 3}
@@ -602,18 +625,26 @@ export function CalendarContent({
                 <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
               ) : (
                 <div className="space-y-2">
-                  {selectedDayEvents.map((evt, idx) => (
+                  {selectedDayEvents.map((evt, idx) => {
+                    const catStyle = evt.type === "homebase" ? getCategoryStyle(evt.category) : null
+                    return (
                     <div key={idx} className="flex items-center gap-3 group">
-                      <span className={cn("size-2 rounded-full shrink-0", TYPE_COLOR[evt.type])} />
+                      <span className={cn("size-2 rounded-full shrink-0", catStyle?.color ?? TYPE_COLOR[evt.type])} />
                       <span className="text-sm flex-1">{evt.title}</span>
                       {!evt.allDay && evt.startHour != null && (
                         <span className="text-xs text-muted-foreground shrink-0">
                           {formatTimeRange(evt)}
                         </span>
                       )}
-                      <Badge variant="outline" className="text-xs capitalize shrink-0">
-                        {evt.type}
-                      </Badge>
+                      {catStyle ? (
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {EVENT_CATEGORIES.find(c => c.value === evt.category)?.label}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs capitalize shrink-0">
+                          {evt.type === "homebase" ? "event" : evt.type}
+                        </Badge>
+                      )}
                       {evt.url && (
                         <a href={evt.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground shrink-0">
                           <ExternalLink className="size-3.5" />
@@ -628,7 +659,8 @@ export function CalendarContent({
                         </button>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -648,11 +680,6 @@ export function CalendarContent({
           view={view}
         />
       )}
-
-      {/* ─── TASKS SECTION ─── */}
-      <div className="border-t pt-4">
-        <TasksContent embedded />
-      </div>
 
       {/* Add / Edit event dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -686,6 +713,24 @@ export function CalendarContent({
                 </div>
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <Label>Category <span className="text-muted-foreground font-normal">(optional — marks as life event)</span></Label>
+              <Select
+                value={form.watch("category") || "none"}
+                onValueChange={(v) => form.setValue("category", v === "none" ? "" : v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No category</SelectItem>
+                  {EVENT_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-1.5">
               <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
@@ -787,12 +832,14 @@ function TimeGridView({ days, dateEvents, todayKey, timeGridRef, onAddEvent, onE
               const allDayEvts = (dateEvents.get(key) ?? []).filter(e => e.allDay)
               return (
                 <div key={key} className="border-r last:border-r-0 p-1 min-h-[28px] space-y-0.5">
-                  {allDayEvts.slice(0, 3).map((evt, i) => (
+                  {allDayEvts.slice(0, 3).map((evt, i) => {
+                    const catStyle = evt.type === "homebase" ? getCategoryStyle(evt.category) : null
+                    return (
                     <div
                       key={i}
                       className={cn(
                         "text-[10px] leading-tight px-1.5 py-0.5 rounded truncate border-l-2",
-                        TYPE_COLOR_BORDER[evt.type]
+                        catStyle?.border ?? TYPE_COLOR_BORDER[evt.type]
                       )}
                     >
                       {evt.url ? (
@@ -803,7 +850,8 @@ function TimeGridView({ days, dateEvents, todayKey, timeGridRef, onAddEvent, onE
                         evt.title
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                   {allDayEvts.length > 3 && (
                     <div className="text-[10px] text-muted-foreground pl-1">+{allDayEvts.length - 3} more</div>
                   )}
@@ -871,13 +919,14 @@ function TimeGridView({ days, dateEvents, todayKey, timeGridRef, onAddEvent, onE
                       const endOffset = ((evt.endHour - GRID_START_HOUR) + (evt.endMinute ?? 0) / 60) * HOUR_HEIGHT
                       duration = Math.max(endOffset - startOffset, 20) // min 20px
                     }
+                    const catStyle = evt.type === "homebase" ? getCategoryStyle(evt.category) : null
 
                     return (
                       <div
                         key={i}
                         className={cn(
                           "absolute left-0.5 right-0.5 rounded border-l-2 px-1 py-0.5 overflow-hidden pointer-events-auto cursor-pointer",
-                          TYPE_COLOR_BORDER[evt.type]
+                          catStyle?.border ?? TYPE_COLOR_BORDER[evt.type]
                         )}
                         style={{ top: startOffset, height: duration }}
                         title={`${evt.title}\n${formatTimeRange(evt)}`}

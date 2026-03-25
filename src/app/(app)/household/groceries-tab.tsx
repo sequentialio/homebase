@@ -496,10 +496,16 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
           return
         }
 
-        // Persist positions for BOTH source and destination groups
-        const destItems = itemsRef.current.filter(
-          (i) => (i.category ?? UNCATEGORIZED) === overContainer
+        // itemsRef.current may be stale (React batches the setItems from handleDragOver),
+        // so the dragged item might still have its old category. Build destItems explicitly.
+        const draggedItem = itemsRef.current.find((i) => i.id === active.id)
+        const existingDestItems = itemsRef.current.filter(
+          (i) => (i.category ?? UNCATEGORIZED) === overContainer && i.id !== active.id
         )
+        // Append dragged item at the end of dest group so it gets a position assigned
+        const destItems = draggedItem
+          ? [...existingDestItems, { ...draggedItem, category: newCategory }]
+          : existingDestItems
         const sourceItems = itemsRef.current.filter(
           (i) => (i.category ?? UNCATEGORIZED) === sourceContainer && i.id !== active.id
         )
@@ -594,9 +600,14 @@ export function GroceriesTab({ userId, items, setItems, view }: GroceriesTabProp
       setItems((prev) => prev.map((i) => (i.id === editing.id ? data : i)))
       toast.success("Item updated")
     } else {
+      // Place new item at the end of its category group
+      const groupItems = items.filter(
+        (i) => i.in_pantry === values.in_pantry && (i.category ?? "") === (values.category || "")
+      )
+      const maxPos = groupItems.reduce((max, i) => Math.max(max, i.position ?? -1), -1)
       const { data, error } = await supabase
         .from("grocery_items")
-        .insert(payload)
+        .insert({ ...payload, position: maxPos + 1 })
         .select()
         .single()
       if (error) {

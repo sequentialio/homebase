@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell"
 import { Toaster } from "@/components/ui/sonner"
 import { SessionTimeout } from "@/components/session-timeout"
 import { AssistantProvider } from "@/lib/assistant/assistant-provider"
+import { UsageTracker } from "@/components/usage-tracker"
 import type { Tables } from "@/types/database"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {children}
         <Toaster />
         <SessionTimeout />
+        {user && <UsageTracker userId={user.id} />}
       </AppShell>
     </AssistantProvider>
   )

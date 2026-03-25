@@ -41,6 +41,7 @@ type CreditAccount = {
   status: string
   lender: string | null
   notes: string | null
+  linked_debt_id: string | null
   created_at: string
 }
 

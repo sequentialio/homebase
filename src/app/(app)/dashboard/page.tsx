@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { getCurrentPayPeriod } from "@/lib/pay-period"
 import {
   DollarSign,
   ShoppingCart,
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { DashboardGreeting } from "./dashboard-greeting"
+import { SpendingCharts } from "@/components/dashboard/spending-charts"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -41,16 +43,15 @@ export default async function DashboardPage() {
   if (!user) redirect("/login")
 
   const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
   const todayStr = now.toISOString().slice(0, 10)
+  const payPeriod = getCurrentPayPeriod()
   const in7 = new Date(now)
   in7.setDate(in7.getDate() + 7)
   const in7Str = in7.toISOString().slice(0, 10)
 
   const [
     { data: accounts },
+    { data: investments },
     { data: debts },
     { data: transactions },
     { data: budgets },
@@ -60,17 +61,17 @@ export default async function DashboardPage() {
     { data: profile },
   ] = await Promise.all([
     supabase.from("bank_accounts").select("balance, name"),
+    supabase.from("investments").select("balance"),
     supabase.from("debts").select("balance, name"),
     supabase
       .from("transactions")
       .select("amount, type, category, description, date")
-      .gte("date", monthStart)
+      .gte("date", payPeriod.start)
+      .lte("date", payPeriod.end)
       .order("date", { ascending: false }),
     supabase
       .from("budgets")
-      .select("category, monthly_limit")
-      .eq("month", month)
-      .eq("year", year),
+      .select("category, period_limit"),
     supabase
       .from("grocery_items")
       .select("id, name, quantity, low_threshold, in_pantry, expiry_date, unit"),
@@ -89,18 +90,20 @@ export default async function DashboardPage() {
   ])
 
   // ── computed stats ──────────────────────────────────────────────────────
-  const totalAssets = (accounts ?? []).reduce((s, a) => s + Number(a.balance), 0)
+  const bankBalance = (accounts ?? []).reduce((s, a) => s + Number(a.balance), 0)
+  const investmentBalance = (investments ?? []).reduce((s, i) => s + Number(i.balance), 0)
+  const totalAssets = bankBalance + investmentBalance
   const totalDebt = (debts ?? []).reduce((s, d) => s + Number(d.balance), 0)
   const netWorth = totalAssets - totalDebt
 
-  const monthExpenses = (transactions ?? [])
+  const periodExpenses = (transactions ?? [])
     .filter((t) => t.type === "expense")
     .reduce((s, t) => s + Number(t.amount), 0)
   const totalBudget = (budgets ?? []).reduce(
-    (s, b) => s + Number(b.monthly_limit),
+    (s, b) => s + Number((b as any).period_limit ?? 0),
     0
   )
-  const budgetPct = totalBudget > 0 ? monthExpenses / totalBudget : 0
+  const budgetPct = totalBudget > 0 ? periodExpenses / totalBudget : 0
 
   const shoppingCount = (groceries ?? []).filter((g) => !g.in_pantry).length
 
@@ -154,11 +157,11 @@ export default async function DashboardPage() {
           </p>
         </div>
 
-        {/* Monthly Spending */}
+        {/* Pay Period Spending */}
         <div className="rounded-lg border p-4 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-              Month Spend
+              Pay Period
             </span>
             {budgetPct > 1 ? (
               <TrendingUp className="size-4 text-red-500" />
@@ -166,7 +169,7 @@ export default async function DashboardPage() {
               <TrendingDown className="size-4 text-muted-foreground" />
             )}
           </div>
-          <p className="text-xl font-bold">{fmt(monthExpenses)}</p>
+          <p className="text-xl font-bold">{fmt(periodExpenses)}</p>
           {totalBudget > 0 ? (
             <div className="space-y-1">
               <div className="w-full bg-muted rounded-full h-1.5">
@@ -272,6 +275,9 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {/* ── Spending charts ────────────────────────────────────────────── */}
+      <SpendingCharts transactions={(transactions ?? []) as any} />
+
       {/* ── Two-column: transactions + calendar ────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Recent Transactions */}
@@ -347,17 +353,20 @@ export default async function DashboardPage() {
           ) : (
             <div className="divide-y">
               {(events ?? []).map((e) => {
-                const isAsana = e.source === "asana"
                 const isCleaning = e.source === "cleaning"
+                const isSharedList = e.source === "shared_list"
+                const isGoogle = e.source === "google"
                 return (
                   <div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
                     <CalendarDays
                       className={cn(
                         "size-4 shrink-0",
-                        isAsana
-                          ? "text-blue-500"
-                          : isCleaning
+                        isCleaning
                           ? "text-orange-500"
+                          : isSharedList
+                          ? "text-purple-500"
+                          : isGoogle
+                          ? "text-red-500"
                           : "text-primary"
                       )}
                     />

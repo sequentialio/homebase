@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
+import { getCurrentPayPeriod } from "@/lib/pay-period"
 
 // Per-instance cache (ephemeral on Vercel — new instance = fresh cache)
 const contextCache = new Map<string, { text: string; expiresAt: number }>()
@@ -14,9 +15,10 @@ export async function buildContext(
   const today = new Date()
   const year = today.getFullYear()
   const month = today.getMonth() + 1
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
+  const payPeriod = getCurrentPayPeriod()
   const sevenDaysOutDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
   const sevenDaysOut = sevenDaysOutDate.toISOString().split("T")[0]
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
 
   const [
     profilesRes,
@@ -41,13 +43,20 @@ export async function buildContext(
     nwHistoryRes,
     alertsRes,
     knowledgeSystemRes,
+    goalsRes,
+    devRequestsRes,
+    sharedListsRes,
+    weightLogsRes,
+    exerciseLogsRes,
+    householdMessagesRes,
   ] = await Promise.all([
     supabase.from("profiles").select("full_name, id"),
     supabase.from("bank_accounts").select("id, name, balance, currency"),
     supabase
       .from("transactions")
       .select("type, amount, category, description, date")
-      .gte("date", monthStart)
+      .gte("date", payPeriod.start)
+      .lte("date", payPeriod.end)
       .order("date", { ascending: false })
       .limit(100),
     // Last 15 individual transactions for cross-referencing
@@ -56,15 +65,13 @@ export async function buildContext(
       .select("type, amount, category, description, date")
       .order("date", { ascending: false })
       .limit(15),
-    supabase
+    (supabase as any)
       .from("budgets")
-      .select("category, monthly_limit")
-      .eq("year", year)
-      .eq("month", month),
+      .select("category, period_limit"),
     supabase.from("debts").select("name, balance, interest_rate, min_payment, status, employer_contribution"),
     supabase
       .from("grocery_items")
-      .select("name, quantity, unit, low_threshold, in_pantry, category, expiry_date"),
+      .select("name, quantity, unit, low_threshold, in_pantry, category, expiry_date, checked"),
     supabase
       .from("cleaning_duties")
       .select("name, frequency, last_completed, next_due, assigned_to, room")
@@ -101,7 +108,7 @@ export async function buildContext(
       .limit(20),
     (supabase as any)
       .from("credit_accounts")
-      .select("name, type, balance, credit_limit, status"),
+      .select("name, type, balance, credit_limit, status, linked_debt_id"),
     (supabase as any)
       .from("credit_profile")
       .select("score, score_source, payment_history_pct, credit_card_use_pct, derogatory_marks, credit_age_years, credit_age_months, total_accounts, hard_inquiries, last_updated")
@@ -136,6 +143,40 @@ export async function buildContext(
       .eq("user_id", userId)
       .eq("category", "System")
       .order("updated_at", { ascending: false }),
+    (supabase as any)
+      .from("goals")
+      .select("id, title, description, category, target_amount, current_amount, target_date, status, priority")
+      .eq("user_id", userId)
+      .neq("status", "achieved")
+      .order("priority", { ascending: true })
+      .order("created_at", { ascending: false }),
+    (supabase as any)
+      .from("dev_requests")
+      .select("id, title, description, category, priority, status, created_at")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .order("priority", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(10),
+    (supabase as any)
+      .from("shared_lists")
+      .select("id, name, shared_list_items(id, checked)")
+      .order("position"),
+    (supabase as any)
+      .from("weight_logs")
+      .select("*")
+      .order("date", { ascending: false })
+      .limit(4),
+    (supabase as any)
+      .from("exercise_logs")
+      .select("*")
+      .gte("date", sevenDaysAgo)
+      .order("date", { ascending: false }),
+    (supabase as any)
+      .from("household_messages")
+      .select("sender_id, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
   ])
 
   const lines: string[] = [
@@ -213,9 +254,13 @@ export async function buildContext(
       byCategory[cat] = (byCategory[cat] ?? 0) + t.amount
     }
     lines.push(
-      `## This Month (${today.toLocaleString("en-US", { month: "long" })})`
+      `## Current Pay Period (${payPeriod.label})`
     )
     lines.push(`Income: $${income.toFixed(2)} | Expenses: $${expenses.toFixed(2)} | Net: $${(income - expenses).toFixed(2)}`)
+    const uncategorized = byCategory["Uncategorized"] ?? 0
+    if (uncategorized > 0 && expenses > 0 && (uncategorized > 200 || uncategorized / expenses > 0.1)) {
+      lines.push(`⚠️ $${uncategorized.toFixed(0)} (${Math.round(uncategorized / expenses * 100)}%) is Uncategorized — budget tracking is incomplete`)
+    }
     if (Object.keys(byCategory).length) {
       const topCats = Object.entries(byCategory)
         .sort((a, b) => b[1] - a[1])
@@ -227,17 +272,18 @@ export async function buildContext(
     lines.push("")
   }
 
-  // Budgets
+  // Budgets (biweekly pay period)
   if (budgetsRes.data?.length && txThisMonthRes.data?.length) {
-    lines.push("## Budget Status")
+    lines.push("## Budget Status (Pay Period)")
     for (const b of budgetsRes.data) {
+      const limit = Number((b as any).period_limit)
       const spent = txThisMonthRes.data
         .filter((t) => t.type === "expense" && t.category === b.category)
         .reduce((s, t) => s + t.amount, 0)
-      const pct = Math.round((spent / b.monthly_limit) * 100)
+      const pct = Math.round((spent / limit) * 100)
       const flag = pct >= 90 ? " ⚠️ OVER" : pct >= 75 ? " (75%+)" : ""
       lines.push(
-        `- ${b.category}: $${spent.toFixed(0)} / $${b.monthly_limit.toFixed(0)}${flag}`
+        `- ${b.category}: $${spent.toFixed(0)} / $${limit.toFixed(0)}${flag}`
       )
     }
     lines.push("")
@@ -353,7 +399,7 @@ export async function buildContext(
   // Grocery & pantry (detailed for cross-referencing with spending)
   if (groceryRes.data?.length) {
     const pantry = groceryRes.data.filter((g) => g.in_pantry)
-    const shopping = groceryRes.data.filter((g) => !g.in_pantry)
+    const shopping = groceryRes.data.filter((g) => !g.in_pantry && !(g as any).checked)
     const lowStock = pantry.filter(
       (g) => g.low_threshold !== null && g.quantity <= (g.low_threshold ?? 0)
     )
@@ -373,8 +419,10 @@ export async function buildContext(
       }
       lines.push("")
     }
+    const totalShoppingItems = groceryRes.data.filter((g) => !g.in_pantry).length
+    const checkedCount = totalShoppingItems - shopping.length
     if (shopping.length) {
-      lines.push(`## Shopping List (${shopping.length} items)`)
+      lines.push(`## Shopping List (${shopping.length} needed${checkedCount > 0 ? `, ${checkedCount} already checked off` : ""})`)
       for (const g of shopping) {
         const qty = g.quantity ? ` x${g.quantity}` : ""
         const cat = g.category ? ` [${g.category}]` : ""
@@ -430,10 +478,21 @@ export async function buildContext(
   // Credit accounts
   if (creditAccountsRes.data?.length) {
     lines.push("## Credit Accounts")
+    const debtsMap = new Map((debtsRes.data ?? []).map((d: any) => [d.id, d]))
     for (const a of creditAccountsRes.data) {
       const limit = a.credit_limit ? ` / $${Number(a.credit_limit).toFixed(2)} limit` : ""
       const util = a.credit_limit ? ` (${((Number(a.balance) / Number(a.credit_limit)) * 100).toFixed(0)}% util)` : ""
-      lines.push(`- ${a.name} (${a.type}): $${Number(a.balance).toFixed(2)}${limit}${util} [${a.status}]`)
+      let linkNote = ""
+      if ((a as any).linked_debt_id) {
+        const linkedDebt = debtsMap.get((a as any).linked_debt_id) as any
+        if (linkedDebt) {
+          linkNote = ` [linked to debt "${linkedDebt.name}"]`
+          if (Math.abs(Number(a.balance) - Number(linkedDebt.balance)) > 0.01) {
+            linkNote += ` ⚠️ BALANCE MISMATCH: credit=$${Number(a.balance).toFixed(2)} vs debt=$${Number(linkedDebt.balance).toFixed(2)}`
+          }
+        }
+      }
+      lines.push(`- ${a.name} (${a.type}): $${Number(a.balance).toFixed(2)}${limit}${util} [${a.status}]${linkNote}`)
     }
     lines.push("")
   }
@@ -441,11 +500,17 @@ export async function buildContext(
   // System knowledge docs — loaded in full every conversation
   const systemDocs = knowledgeSystemRes?.data as Array<{ id: string; title: string; content: string; updated_at: string }> | null
   if (systemDocs?.length) {
+    const MAX_SYSTEM_DOC_CHARS = 4000
     for (const doc of systemDocs) {
       lines.push(`## [System Doc] ${doc.title} [id: ${doc.id}]`)
       lines.push(`*Last updated: ${new Date(doc.updated_at).toLocaleDateString()}*`)
       lines.push("")
-      lines.push(doc.content)
+      if (doc.content.length > MAX_SYSTEM_DOC_CHARS) {
+        lines.push(doc.content.slice(0, MAX_SYSTEM_DOC_CHARS))
+        lines.push(`\n... (truncated — ${doc.content.length} chars total. Use read_document to see full content.)`)
+      } else {
+        lines.push(doc.content)
+      }
       lines.push("")
     }
   }
@@ -475,6 +540,79 @@ export async function buildContext(
         day: "numeric",
       })
       lines.push(`- ${date}: ${e.title} [${e.source}]`)
+    }
+    lines.push("")
+  }
+
+  // Goals
+  const goals = goalsRes?.data as Array<Record<string, unknown>> | null
+  if (goals?.length) {
+    lines.push("## Active Goals")
+    for (const g of goals) {
+      const pct = g.target_amount && Number(g.target_amount) > 0
+        ? ` (${Math.round((Number(g.current_amount ?? 0) / Number(g.target_amount)) * 100)}% complete)`
+        : ""
+      const due = g.target_date ? ` — due ${g.target_date}` : ""
+      const amt = g.target_amount ? ` — target: $${Number(g.target_amount).toLocaleString()}${pct}` : ""
+      lines.push(`- [${g.priority}] ${g.title} [${g.category}]${amt}${due} [id: ${g.id}]`)
+      if (g.description) lines.push(`  ${g.description}`)
+    }
+    lines.push("")
+  }
+
+  // Dev requests (assistant → Claude Code channel)
+  const devRequests = devRequestsRes?.data as Array<Record<string, unknown>> | null
+  if (devRequests?.length) {
+    lines.push("## Open Dev Requests (for Claude Code)")
+    for (const r of devRequests) {
+      lines.push(`- [${r.priority}/${r.category}] ${r.title}: ${r.description} [id: ${r.id}]`)
+    }
+    lines.push("These are issues/improvements you've logged. Reference them when discussing app problems or improvements.")
+    lines.push("")
+  }
+
+  // Shared Lists
+  const sharedLists = sharedListsRes?.data as Array<{ id: string; name: string; shared_list_items: Array<{ id: string; checked: boolean }> }> | null
+  if (sharedLists?.length) {
+    lines.push("## Shared Lists")
+    for (const list of sharedLists) {
+      const items = list.shared_list_items ?? []
+      const unchecked = items.filter((i) => !i.checked).length
+      lines.push(`- ${list.name}: ${unchecked}/${items.length} unchecked [id: ${list.id}]`)
+    }
+    lines.push("")
+  }
+
+  // Health Snapshot
+  const weightLogs = weightLogsRes?.data as Array<{ user_id: string; weight: number; date: string }> | null
+  const exerciseLogs = exerciseLogsRes?.data as Array<{ user_id: string; type: string; date: string }> | null
+  if ((weightLogs && weightLogs.length > 0) || (exerciseLogs && exerciseLogs.length > 0)) {
+    lines.push("## Health Snapshot")
+    if (weightLogs?.length) {
+      const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p.full_name ?? "Unknown"]))
+      const latestByUser = new Map<string, { weight: number; date: string }>()
+      for (const w of weightLogs) {
+        if (!latestByUser.has(w.user_id)) latestByUser.set(w.user_id, { weight: w.weight, date: w.date })
+      }
+      for (const [uid, latest] of latestByUser) {
+        lines.push(`- ${profileMap.get(uid) ?? uid}: ${latest.weight} lbs (${latest.date})`)
+      }
+    }
+    if (exerciseLogs?.length) {
+      lines.push(`- Exercises this week: ${exerciseLogs.length}`)
+    }
+    lines.push("")
+  }
+
+  // Recent Chat
+  const chatMessages = householdMessagesRes?.data as Array<{ sender_id: string; content: string; created_at: string }> | null
+  if (chatMessages?.length) {
+    lines.push("## Recent Chat")
+    const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p.full_name ?? "Unknown"]))
+    for (const m of chatMessages) {
+      const sender = profileMap.get(m.sender_id) ?? m.sender_id
+      const time = new Date(m.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      lines.push(`- ${sender} (${time}): ${m.content.slice(0, 100)}${m.content.length > 100 ? "..." : ""}`)
     }
     lines.push("")
   }

@@ -27,8 +27,7 @@ export const INCOME_CATEGORIES = [
 ] as const
 
 export const ALL_CATEGORIES = [
-  ...EXPENSE_CATEGORIES,
-  ...INCOME_CATEGORIES,
+  ...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]),
 ] as string[]
 
 export const TRANSACTION_TYPES = ["expense", "income", "transfer"] as const

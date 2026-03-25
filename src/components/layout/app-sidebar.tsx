@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -11,6 +11,9 @@ import {
   Settings,
   LogOut,
   Download,
+  Users,
+  Heart,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -61,6 +64,24 @@ const navItems: NavItem[] = [
     matchPrefixes: ["/household"],
   },
   {
+    label: "Shared",
+    href: "/shared",
+    icon: Users,
+    matchPrefixes: ["/shared"],
+  },
+  {
+    label: "Health",
+    href: "/health",
+    icon: Heart,
+    matchPrefixes: ["/health"],
+  },
+  {
+    label: "Together",
+    href: "/together",
+    icon: MessageCircle,
+    matchPrefixes: ["/together"],
+  },
+  {
     label: "Calendar",
     href: "/calendar",
     icon: Calendar,
@@ -83,7 +104,7 @@ const navItems: NavItem[] = [
 export function AppSidebar({ profile }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [signingOut, setSigningOut] = useState(false)
   const { canInstall, install } = usePwaInstall()
 

@@ -55,8 +55,8 @@ interface TileConfig {
 }
 
 const DEFAULT_TILES: TileConfig[] = [
-  { label: "Income", type: "income", scope: "all", accountId: "all", category: "all" },
-  { label: "Expenses", type: "expense", scope: "all", accountId: "all", category: "all" },
+  { label: "Income", type: "income", scope: "personal", accountId: "all", category: "all" },
+  { label: "Expenses", type: "expense", scope: "personal", accountId: "all", category: "all" },
 ]
 
 function loadTiles(): TileConfig[] {
@@ -102,6 +102,8 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
   const [filterYear, setFilterYear] = useState<number | "all">(now.getFullYear())
   const [filterScope, setFilterScope] = useState<string>("all")
   const [filterAccount, setFilterAccount] = useState<string>("all")
+  const [filterCategory, setFilterCategory] = useState<string>("all")
+  const [searchText, setSearchText] = useState<string>("")
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -111,9 +113,16 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       if (filterMonth !== "all" && m !== (filterMonth as number) + 1) return false
       if (filterScope !== "all" && (t.scope ?? "personal") !== filterScope) return false
       if (filterAccount !== "all" && t.account_id !== filterAccount) return false
+      if (filterCategory !== "all" && t.category !== filterCategory) return false
+      if (searchText.trim()) {
+        const search = searchText.toLowerCase()
+        const matchesDesc = (t.description ?? "").toLowerCase().includes(search)
+        const matchesCategory = (t.category ?? "").toLowerCase().includes(search)
+        if (!matchesDesc && !matchesCategory) return false
+      }
       return true
     })
-  }, [transactions, filterMonth, filterYear, filterScope, filterAccount])
+  }, [transactions, filterMonth, filterYear, filterScope, filterAccount, filterCategory, searchText])
 
   const [tiles, setTiles] = useState<TileConfig[]>(DEFAULT_TILES)
 
@@ -383,7 +392,18 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+          <Input
+            placeholder="Search description or category..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="h-8 text-xs sm:w-48"
+          />
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="size-4 mr-1" /> Add
+          </Button>
+        </div>
         <div className="flex gap-2 flex-wrap">
           <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(v === "all" ? "all" : Number(v))}>
             <SelectTrigger className="w-24 h-8 text-xs">
@@ -417,6 +437,17 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
               <SelectItem value="business">Business</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-32 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {ALL_CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {accounts.length > 0 && (
             <Select value={filterAccount} onValueChange={setFilterAccount}>
               <SelectTrigger className="w-36 h-8 text-xs">
@@ -431,9 +462,6 @@ export function TransactionsTab({ userId, initialTransactions, accounts }: Trans
             </Select>
           )}
         </div>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="size-4 mr-1" /> Add
-        </Button>
       </div>
 
       {/* Table */}

@@ -397,10 +397,15 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
           return
         }
 
-        // Persist positions for destination and source groups
-        const destDuties = dutiesRef.current.filter(
-          (d) => (d.room ?? DEFAULT_ROOM) === overContainer
+        // dutiesRef.current may be stale (React batches the setDuties from handleDragOver),
+        // so the dragged item might still have its old room. Build destDuties explicitly.
+        const draggedDuty = dutiesRef.current.find((d) => d.id === active.id)
+        const existingDestDuties = dutiesRef.current.filter(
+          (d) => (d.room ?? DEFAULT_ROOM) === overContainer && d.id !== active.id
         )
+        const destDuties = draggedDuty
+          ? [...existingDestDuties, { ...draggedDuty, room: newRoom }]
+          : existingDestDuties
         const srcDuties = dutiesRef.current.filter(
           (d) => (d.room ?? DEFAULT_ROOM) === activeContainer && d.id !== active.id
         )
@@ -467,6 +472,9 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
       toast.success("Duty updated")
     } else {
       // Set next_due from today so it appears on the calendar immediately
+      // Place new duty at the end of its room group
+      const groupDuties = duties.filter((d) => (d.room ?? DEFAULT_ROOM) === (values.room ?? DEFAULT_ROOM))
+      const maxPos = groupDuties.reduce((max, d) => Math.max(max, d.position ?? -1), -1)
       const nextDue = calcNextDue(new Date().toISOString(), values.frequency)
       const payload = {
         name: values.name,
@@ -475,6 +483,7 @@ export function CleaningTab({ userId, initialDuties, profiles }: CleaningTabProp
         notes: values.notes || null,
         room,
         next_due: nextDue,
+        position: maxPos + 1,
       }
       const { data, error } = await supabase
         .from("cleaning_duties")

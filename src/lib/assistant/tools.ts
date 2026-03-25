@@ -38,7 +38,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "get_calendar_events",
     description:
-      "Get calendar events for a date range. Returns Mita events and synced Asana tasks.",
+      "Get calendar events for a date range. Returns Mita events, Google Calendar events, and shared list items.",
     input_schema: {
       type: "object",
       properties: {
@@ -91,6 +91,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
           type: "string",
           description: "UUID of the bank account to associate. Look up the account_id from the '## Bank Accounts' section in your context. Always set this when the user mentions a specific account.",
         },
+        force_insert: { type: "boolean", description: "Set to true to bypass duplicate detection and force-insert the transaction" },
       },
       required: ["type", "amount", "description"],
     },
@@ -272,17 +273,15 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "upsert_budget",
     description:
-      "Add or update a monthly budget for a category. If updating, provide the id from get_finances.",
+      "Add or update a biweekly budget for a category. Budgets are standing limits that apply every pay period. If updating, provide the id from get_finances.",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Existing budget ID to update (omit to create new)" },
         category: { type: "string", description: "Budget category (e.g. Groceries, Dining, Transport)" },
-        monthly_limit: { type: "number", description: "Monthly spending limit in dollars" },
-        month: { type: "number", description: "Month number 1-12 (default: current month)" },
-        year: { type: "number", description: "Year (default: current year)" },
+        period_limit: { type: "number", description: "Biweekly spending limit per pay period in dollars" },
       },
-      required: ["category", "monthly_limit"],
+      required: ["category", "period_limit"],
     },
   },
   {
@@ -441,6 +440,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         opened_date: { type: "string", description: "Date account was opened YYYY-MM-DD" },
         status: { type: "string", enum: ["open", "closed"], description: "Account status" },
         lender: { type: "string", description: "Lender/institution name (optional)" },
+        linked_debt_id: { type: "string", description: "ID of a debt record to link to this credit account. When linked, balance updates propagate bidirectionally between credit_accounts and debts." },
       },
       required: ["name", "type", "balance"],
     },
@@ -517,13 +517,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: "get_budget_forecast",
     description:
-      "Project month-end spending per budget category based on current spend and days elapsed. Returns forecasted overage or underage for each category and overall cash flow pace. Use when the user asks about budget projections, spending pace, or whether they'll blow their budget this month.",
+      "Project pay-period-end spending per budget category based on current spend and days elapsed. Returns forecasted overage or underage for each category. Use when the user asks about budget projections, spending pace, or whether they'll blow their budget this pay period.",
     input_schema: {
       type: "object",
-      properties: {
-        month: { type: "number", description: "Month 1-12 (default: current month)" },
-        year: { type: "number", description: "Year (default: current year)" },
-      },
+      properties: {},
     },
   },
   {
@@ -643,11 +640,248 @@ export const toolDefinitions: Anthropic.Tool[] = [
       required: ["alert_id"],
     },
   },
+  {
+    name: "upsert_goal",
+    description:
+      "Create or update a goal. Goals track what the user is working toward — financial targets, personal milestones, household projects. If goal_id is provided, the existing goal will be updated. Use this to help the user set, adjust, or mark goals as achieved.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal_id: { type: "string", description: "Optional: existing goal ID to update" },
+        title: { type: "string", description: "Short goal title" },
+        description: { type: "string", description: "Optional longer description" },
+        category: { type: "string", description: "Category: Financial, Personal, Household, Career, Health, or Other" },
+        target_amount: { type: "number", description: "Optional target dollar amount" },
+        current_amount: { type: "number", description: "Current progress amount" },
+        target_date: { type: "string", description: "Optional target date (YYYY-MM-DD)" },
+        status: { type: "string", description: "Status: active, achieved, or paused" },
+        priority: { type: "string", description: "Priority: high, medium, or low" },
+      },
+      required: ["title", "category"],
+    },
+  },
+  {
+    name: "create_dev_request",
+    description:
+      "Log an improvement request, bug report, or feature idea for Claude Code to implement. Use this whenever you notice a bug in the app, a missing feature the user needs, an improvement that would make things better, or a question about the codebase. These requests appear on the Goals page for the user to review and bring to a Claude Code session. Be specific: include what the issue is, why it matters, and any relevant context from the conversation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short descriptive title" },
+        description: { type: "string", description: "Clear description of the issue or request" },
+        category: { type: "string", description: "bug, improvement, feature, or question" },
+        priority: { type: "string", description: "high, medium, or low" },
+        context: { type: "string", description: "Optional: relevant conversation context or user quote" },
+      },
+      required: ["title", "description", "category", "priority"],
+    },
+  },
+  {
+    name: "get_usage_insights",
+    description:
+      "Get behavioral insights from the user's usage history — which pages they visit most, which features they use, usage patterns over time. Use this to personalize advice, notice neglected areas, or understand how the user actually uses the app.",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "How many days of history to analyze (default 30)" },
+      },
+    },
+  },
+  {
+    name: "delete_record",
+    description:
+      "Permanently delete a record by ID. Use for removing incorrect transactions, duplicate entries, stale accounts, paid-off debts, cancelled subscriptions, etc. Always confirm with the user before deleting financial records unless they explicitly asked to delete it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        table: {
+          type: "string",
+          description: "Table to delete from: transactions, debts, bank_accounts, recurring_expenses, insurance_policies, investments, budgets, credit_accounts, tax_items, income_sources, business_engagements, calendar_events, grocery_items, goals, dev_requests",
+        },
+        id: { type: "string", description: "UUID of the record to delete" },
+      },
+      required: ["table", "id"],
+    },
+  },
+  {
+    name: "update_calendar_event",
+    description:
+      "Update an existing Mita calendar event (title, time, description). Only works on events created in Mita — not Google Calendar synced events or shared list items. Get event IDs from get_calendar_events.",
+    input_schema: {
+      type: "object",
+      properties: {
+        event_id: { type: "string", description: "ID of the event to update" },
+        title: { type: "string", description: "Updated event title" },
+        start_at: { type: "string", description: "Updated start datetime in ISO 8601 format" },
+        end_at: { type: "string", description: "Updated end datetime in ISO 8601 format" },
+        description: { type: "string", description: "Updated notes/description" },
+        all_day: { type: "boolean", description: "Whether it is an all-day event" },
+      },
+      required: ["event_id"],
+    },
+  },
+  {
+    name: "toggle_shopping_item",
+    description:
+      "Check or uncheck a shopping list item (mark as purchased/unpurchased). Optionally move to pantry when checked off. Get item IDs from get_pantry_and_grocery.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "ID of the grocery item" },
+        checked: { type: "boolean", description: "true = purchased/checked off, false = uncheck" },
+        move_to_pantry: { type: "boolean", description: "If true, also move item to pantry (sets in_pantry=true). Use when the user has bought the item and wants it tracked in their pantry." },
+      },
+      required: ["item_id", "checked"],
+    },
+  },
+  {
+    name: "complete_cleaning_duty",
+    description:
+      "Mark a cleaning duty as completed today and automatically recalculate the next due date based on its frequency. Get duty IDs from get_cleaning_duties.",
+    input_schema: {
+      type: "object",
+      properties: {
+        duty_id: { type: "string", description: "ID of the cleaning duty to mark complete" },
+      },
+      required: ["duty_id"],
+    },
+  },
+  {
+    name: "get_shared_finances",
+    description:
+      "Get shared account balances, recent shared transactions, and responsibility splits between household members.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "update_shared_responsibility",
+    description:
+      "Set the responsibility percentage for a user on a shared bank account. Both users' percentages should sum to 100.",
+    input_schema: {
+      type: "object",
+      properties: {
+        account_id: { type: "string" },
+        user_id: { type: "string" },
+        percentage: { type: "number", minimum: 0, maximum: 100 },
+      },
+      required: ["account_id", "user_id", "percentage"],
+    },
+  },
+  {
+    name: "log_weight",
+    description:
+      "Log a weight entry for the current user. If an entry already exists for the given date, it will be updated (upsert). Weight is in pounds.",
+    input_schema: {
+      type: "object",
+      properties: {
+        weight: { type: "number" },
+        date: { type: "string", description: "YYYY-MM-DD format" },
+        notes: { type: "string" },
+      },
+      required: ["weight"],
+    },
+  },
+  {
+    name: "log_exercise",
+    description: "Log an exercise entry for the current user.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "e.g. Run, Weights, Yoga, Walk, Cycling, Swimming, HIIT" },
+        duration_minutes: { type: "number" },
+        distance: { type: "number", description: "in miles" },
+        calories: { type: "number" },
+        date: { type: "string", description: "YYYY-MM-DD format" },
+        notes: { type: "string" },
+      },
+      required: ["type"],
+    },
+  },
+  {
+    name: "get_health_data",
+    description:
+      "Get recent weight and exercise logs for one or both users.",
+    input_schema: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "Optional: filter by user. Omit for both users." },
+        days: { type: "number", description: "Number of days back. Default 30." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "send_household_message",
+    description:
+      "Send a message in the household chat between Alan and Dani.",
+    input_schema: {
+      type: "object",
+      properties: {
+        content: { type: "string" },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "manage_shared_list",
+    description: "Create, update, or delete a shared list.",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["create", "update", "delete"] },
+        id: { type: "string", description: "Required for update/delete" },
+        name: { type: "string", description: "Required for create, optional for update" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "manage_shared_list_item",
+    description:
+      "Add, update, check/uncheck, or delete items on a shared list.",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["add", "update", "check", "uncheck", "delete"] },
+        list_id: { type: "string", description: "Required for add" },
+        id: { type: "string", description: "Required for update/check/uncheck/delete" },
+        title: { type: "string", description: "Required for add, optional for update" },
+        due_date: { type: "string", description: "YYYY-MM-DD format, optional" },
+        assigned_to: { type: "string", description: "User ID, optional" },
+      },
+      required: ["action"],
+    },
+  },
 ]
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 // ── Freshness tracker ─────────────────────────────────────────────────────────
+
+// ── Category normalization ────────────────────────────────────────────────────
+
+const CATEGORY_ALIASES: Record<string, string> = {
+  "dining": "Food & Dining",
+  "fast food": "Food & Dining",
+  "coffee shops": "Food & Dining",
+  "coffee": "Food & Dining",
+  "restaurants": "Food & Dining",
+  "restaurant": "Food & Dining",
+  "food & drink": "Food & Dining",
+  "electronics & software": "Software",
+  "dentist": "Healthcare",
+  "doctor": "Healthcare",
+  "medical": "Healthcare",
+}
+
+function normalizeCategory(category: string | undefined | null): string | null {
+  if (!category) return null
+  const trimmed = category.trim()
+  return CATEGORY_ALIASES[trimmed.toLowerCase()] ?? trimmed
+}
 
 const TOOL_SECTION_MAP: Record<string, string> = {
   log_transaction: "transactions",
@@ -809,6 +1043,51 @@ export async function executeTool(
       case "dismiss_alert":
         return await dismissAlert(supabase, userId, input)
 
+      case "upsert_goal":
+        return await upsertGoal(supabase, userId, input)
+
+      case "create_dev_request":
+        return await createDevRequest(supabase, userId, input)
+
+      case "get_usage_insights":
+        return await getUsageInsights(supabase, userId, input)
+
+      case "delete_record":
+        return await deleteRecord(supabase, userId, input)
+
+      case "update_calendar_event":
+        return await updateCalendarEvent(supabase, userId, input)
+
+      case "toggle_shopping_item":
+        return await toggleShoppingItem(supabase, input)
+
+      case "complete_cleaning_duty":
+        return await completeCleaningDuty(supabase, input)
+
+      case "get_shared_finances":
+        return await getSharedFinances(supabase, userId, input)
+
+      case "update_shared_responsibility":
+        return await updateSharedResponsibility(supabase, userId, input)
+
+      case "log_weight":
+        return await logWeight(supabase, userId, input)
+
+      case "log_exercise":
+        return await logExercise(supabase, userId, input)
+
+      case "get_health_data":
+        return await getHealthData(supabase, userId, input)
+
+      case "send_household_message":
+        return await sendHouseholdMessage(supabase, userId, input)
+
+      case "manage_shared_list":
+        return await manageSharedList(supabase, userId, input)
+
+      case "manage_shared_list_item":
+        return await manageSharedListItem(supabase, userId, input)
+
       default:
         return `Unknown tool: ${name}`
     }
@@ -833,28 +1112,30 @@ async function getFinances(
 
   const [accountsRes, txRes, budgetsRes, debtsRes, incomeRes, investmentsRes, recurringRes, expSectionsRes, engagementsRes, insuranceRes, taxRes, creditAccountsRes, creditProfileRes] =
     await Promise.all([
-      supabase.from("bank_accounts").select("*"),
+      supabase.from("bank_accounts").select("id, name, balance, currency"),
       supabase
         .from("transactions")
-        .select("*")
+        .select("id, date, type, amount, category, description, account_id, scope")
         .gte("date", since)
-        .order("date", { ascending: false }),
-      supabase.from("budgets").select("*"),
-      supabase.from("debts").select("*"),
-      supabase.from("income_sources").select("*").eq("active", true),
-      supabase.from("investments").select("*").order("name"),
-      supabase.from("recurring_expenses").select("*").eq("active", true).order("position"),
-      supabase.from("expense_sections").select("*").order("position"),
-      supabase.from("business_engagements").select("*").order("date", { ascending: false }),
-      supabase.from("insurance_policies").select("*").order("name"),
-      supabase.from("tax_items").select("*").order("tax_year", { ascending: false }),
-      (supabase as any).from("credit_accounts").select("*").order("name"),
-      (supabase as any).from("credit_profile").select("*").limit(1),
+        .order("date", { ascending: false })
+        .limit(150),
+      supabase.from("budgets").select("id, category, period_limit, section_id"),
+      supabase.from("debts").select("id, name, balance, interest_rate, min_payment, status"),
+      supabase.from("income_sources").select("id, name, amount, frequency, gross_amount, deductions, active").eq("active", true),
+      supabase.from("investments").select("id, name, account_type, balance, gain_loss, rate_of_return").order("name"),
+      supabase.from("recurring_expenses").select("id, name, amount, category, frequency, billing_day, auto_pay, active").eq("active", true).order("position"),
+      supabase.from("expense_sections").select("id, name, position").order("position"),
+      supabase.from("business_engagements").select("id, client, date, amount, taxes_owed, revenue, status").order("date", { ascending: false }).limit(20),
+      supabase.from("insurance_policies").select("id, name, type, provider, premium, renewal_date, notes").order("name"),
+      supabase.from("tax_items").select("id, name, amount, type, tax_year, form_source, category").order("tax_year", { ascending: false }),
+      (supabase as any).from("credit_accounts").select("id, name, type, balance, credit_limit, status, linked_debt_id").order("name"),
+      (supabase as any).from("credit_profile").select("score, score_source, payment_history_pct, credit_card_use_pct, derogatory_marks, credit_age_years, total_accounts, hard_inquiries, last_updated").limit(1),
     ])
 
   return JSON.stringify({
     accounts: accountsRes.data ?? [],
     transactions: txRes.data ?? [],
+    transaction_count: `${(txRes.data ?? []).length} shown (limit 150)`,
     budgets: budgetsRes.data ?? [],
     debts: debtsRes.data ?? [],
     income_sources: incomeRes.data ?? [],
@@ -943,15 +1224,34 @@ async function logTransaction(
   const scope = (input.scope as string) ?? "personal"
   if (scope !== "personal" && scope !== "business") return `Invalid scope — must be "personal" or "business".`
 
+  const date = (input.date as string) ?? new Date().toISOString().split("T")[0]
+  const amount = Number(input.amount)
+  const category = normalizeCategory(input.category as string | undefined)
+
+  // Duplicate detection (skip if force_insert is set)
+  if (!input.force_insert) {
+    const { data: dupes } = await supabase
+      .from("transactions")
+      .select("id, description, amount, date, type")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .eq("amount", amount)
+      .eq("type", input.type as string)
+      .limit(3)
+    if (dupes && dupes.length > 0) {
+      return `⚠️ Possible duplicate: a ${input.type} of $${amount} (${dupes[0].description}) already exists on ${date}. If this is intentional, pass force_insert: true to save anyway.`
+    }
+  }
+
   const { error, data } = await supabase
     .from("transactions")
     .insert({
       user_id: userId,
       type: input.type as string,
-      amount: Number(input.amount),
+      amount,
       description: input.description as string,
-      category: (input.category as string) ?? null,
-      date: (input.date as string) ?? new Date().toISOString().split("T")[0],
+      category,
+      date,
       scope,
       account_id: (input.account_id as string) ?? null,
     } as never)
@@ -959,6 +1259,17 @@ async function logTransaction(
     .single()
 
   if (error) return `Failed to log transaction: ${error.message}`
+
+  // Log audit event
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "transaction_logged",
+    targetTable: "transactions",
+    targetId: data.id,
+    details: { type: data.type, amount, category, scope },
+  })
+
   const acctNote = input.account_id ? ` [account: ${input.account_id}]` : ""
   return `Transaction logged successfully: ${data.type} $${data.amount} — ${data.description} (${data.date}) [${scope}]${acctNote}`
 }
@@ -987,7 +1298,7 @@ async function bulkLogTransactions(
     type: t.type,
     amount: Number(t.amount),
     description: t.description,
-    category: t.category ?? null,
+    category: normalizeCategory(t.category) ?? null,
     date: t.date ?? today,
     scope: t.scope ?? "personal",
     account_id: t.account_id ?? null,
@@ -995,6 +1306,16 @@ async function bulkLogTransactions(
 
   const { error, data } = await supabase.from("transactions").insert(rows as never).select()
   if (error) return `Failed to log transactions: ${error.message}`
+
+  // Log audit event
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "bulk_transactions_logged",
+    targetTable: "transactions",
+    details: { count: data.length, samples: data.slice(0, 3).map(d => ({ type: d.type, amount: d.amount })) },
+  })
+
   return `Logged ${data.length} transaction${data.length !== 1 ? "s" : ""} successfully.`
 }
 
@@ -1086,17 +1407,40 @@ async function upsertDebt(
     employer_contribution: input.employer_contribution != null ? Number(input.employer_contribution) : null,
     notes: (input.notes as string) ?? null,
   }
+  let result: string
+  let debtId: string
   if (id) {
     const { error, data } = await supabase.from("debts").update(payload as never).eq("id", id).select().single()
     if (error) return `Failed to update debt: ${error.message}`
+    debtId = data.id
     const statusNote = (data as any).status && (data as any).status !== "active" ? ` [${(data as any).status}]` : ""
     const empNote = (data as any).employer_contribution ? ` (employer contributes $${(data as any).employer_contribution}/mo)` : ""
-    return `Debt updated: "${data.name}" — balance $${data.balance}${data.min_payment ? `, min payment $${data.min_payment}` : ""}${statusNote}${empNote}`
+    result = `Debt updated: "${data.name}" — balance $${data.balance}${data.min_payment ? `, min payment $${data.min_payment}` : ""}${statusNote}${empNote}`
   } else {
     const { error, data } = await supabase.from("debts").insert(payload as never).select().single()
     if (error) return `Failed to add debt: ${error.message}`
-    return `Debt added: "${data.name}" — balance $${data.balance}`
+    debtId = data.id
+    result = `Debt added: "${data.name}" — balance $${data.balance}`
   }
+
+  // Bidirectional sync: propagate balance to any linked credit account
+  if (input.balance !== undefined) {
+    const { data: linked } = await (supabase as any)
+      .from("credit_accounts")
+      .select("id")
+      .eq("linked_debt_id", debtId)
+      .eq("user_id", userId)
+    if (linked && linked.length > 0) {
+      await (supabase as any)
+        .from("credit_accounts")
+        .update({ balance: Number(input.balance) })
+        .eq("linked_debt_id", debtId)
+        .eq("user_id", userId)
+      result += ` (synced balance to ${linked.length} linked credit account${linked.length > 1 ? "s" : ""})`
+    }
+  }
+
+  return result
 }
 
 async function upsertAccount(
@@ -1162,22 +1506,19 @@ async function upsertBudget(
   input: Record<string, unknown>
 ): Promise<string> {
   const id = input.id as string | undefined
-  const now = new Date()
   const payload = {
     user_id: userId,
     category: input.category as string,
-    monthly_limit: Number(input.monthly_limit),
-    month: input.month != null ? Number(input.month) : now.getMonth() + 1,
-    year: input.year != null ? Number(input.year) : now.getFullYear(),
+    period_limit: Number(input.period_limit),
   }
   if (id) {
-    const { error, data } = await supabase.from("budgets").update(payload).eq("id", id).select().single()
+    const { error, data } = await supabase.from("budgets").update(payload as never).eq("id", id).select().single()
     if (error) return `Failed to update budget: ${error.message}`
-    return `Budget updated: ${data.category} — $${data.monthly_limit}/mo`
+    return `Budget updated: ${(data as any).category} — $${(data as any).period_limit}/pay period`
   } else {
-    const { error, data } = await supabase.from("budgets").insert(payload).select().single()
+    const { error, data } = await supabase.from("budgets").insert(payload as never).select().single()
     if (error) return `Failed to add budget: ${error.message}`
-    return `Budget added: ${data.category} — $${data.monthly_limit}/mo for ${data.month}/${data.year}`
+    return `Budget added: ${(data as any).category} — $${(data as any).period_limit}/pay period`
   }
 }
 
@@ -1348,7 +1689,7 @@ async function upsertCreditAccount(
   const nameErr = validateString(input.name, "Name")
   if (nameErr) return nameErr
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     user_id: userId,
     name: input.name as string,
     type: (input.type as string) ?? "credit_card",
@@ -1359,16 +1700,33 @@ async function upsertCreditAccount(
     lender: (input.lender as string) ?? null,
   }
 
+  if (input.linked_debt_id !== undefined) {
+    payload.linked_debt_id = (input.linked_debt_id as string) || null
+  }
+
   const id = input.id as string | undefined
+  let result: string
+  let savedData: any
   if (id) {
     const { error, data } = await (supabase as any).from("credit_accounts").update(payload).eq("id", id).select().single()
     if (error) return `Failed to update credit account: ${error.message}`
-    return `Credit account updated: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
+    savedData = data
+    result = `Credit account updated: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
   } else {
     const { error, data } = await (supabase as any).from("credit_accounts").insert(payload).select().single()
     if (error) return `Failed to add credit account: ${error.message}`
-    return `Credit account added: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
+    savedData = data
+    result = `Credit account added: "${data.name}" (${data.type}) — balance $${data.balance}${data.credit_limit ? `, limit $${data.credit_limit}` : ""}`
   }
+
+  // Bidirectional sync: propagate balance to linked debt
+  const linkedDebtId = savedData.linked_debt_id as string | null
+  if (linkedDebtId && input.balance !== undefined) {
+    const { error: syncErr } = await supabase.from("debts").update({ balance: Number(input.balance) } as never).eq("id", linkedDebtId).eq("user_id", userId)
+    if (!syncErr) result += ` (synced balance to linked debt)`
+  }
+
+  return result
 }
 
 async function updateCreditProfile(
@@ -1591,7 +1949,9 @@ async function addCalendarEvent(
     .single()
 
   if (error) return `Failed to add event: ${error.message}`
-  return `Event added: "${data.title}" on ${new Date(data.start_at).toLocaleDateString()}`
+  // Use date string slice for all-day events to avoid UTC→local timezone shift
+  const displayDate = data.all_day ? data.start_at.slice(0, 10) : new Date(data.start_at).toLocaleDateString()
+  return `Event added: "${data.title}" on ${displayDate}`
 }
 
 async function searchKnowledgeBase(
@@ -1700,25 +2060,25 @@ async function saveToKnowledgeBase(
 async function getBudgetForecast(
   supabase: SupabaseClient<Database>,
   userId: string,
-  input: Record<string, unknown>
+  _input: Record<string, unknown>
 ): Promise<string> {
+  const { getCurrentPayPeriod } = await import("@/lib/pay-period")
+  const period = getCurrentPayPeriod()
   const now = new Date()
-  const month = Number(input.month ?? now.getMonth() + 1)
-  const year = Number(input.year ?? now.getFullYear())
 
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const daysElapsed = year === now.getFullYear() && month === now.getMonth() + 1
-    ? now.getDate()
-    : daysInMonth
+  // Calculate days elapsed and total days in pay period
+  const periodStartDate = new Date(period.start + "T00:00:00")
+  const periodEndDate = new Date(period.end + "T00:00:00")
+  const totalDays = 14
+  const daysElapsed = Math.max(1, Math.ceil((now.getTime() - periodStartDate.getTime()) / (24 * 60 * 60 * 1000)))
 
   const [txRes, budgetsRes] = await Promise.all([
     supabase
       .from("transactions")
       .select("category, amount, type")
       .eq("user_id", userId)
-      .gte("date", startDate)
-      .lt("date", `${year}-${String(month + 1).padStart(2, "0")}-01`)
+      .gte("date", period.start)
+      .lte("date", period.end)
       .eq("type", "expense"),
     supabase.from("budgets").select("*").eq("user_id", userId),
   ])
@@ -1738,20 +2098,21 @@ async function getBudgetForecast(
   let totalProjected = 0
 
   for (const budget of budgets) {
+    const limit = (budget as any).period_limit
     const spent = spentByCategory[budget.category] ?? 0
     const dailyRate = daysElapsed > 0 ? spent / daysElapsed : 0
-    const projected = dailyRate * daysInMonth
-    const variance = budget.monthly_limit - projected
-    const pct = budget.monthly_limit > 0 ? (spent / budget.monthly_limit) * 100 : 0
-    const status = projected > budget.monthly_limit ? "over" : pct > 75 ? "at_risk" : "on_track"
-    totalBudget += budget.monthly_limit
+    const projected = dailyRate * totalDays
+    const variance = limit - projected
+    const pct = limit > 0 ? (spent / limit) * 100 : 0
+    const status = projected > limit ? "over" : pct > 75 ? "at_risk" : "on_track"
+    totalBudget += limit
     totalProjected += projected
     results.push({
       category: budget.category,
       spent_to_date: Math.round(spent * 100) / 100,
-      budget: budget.monthly_limit,
+      budget: limit,
       daily_rate: Math.round(dailyRate * 100) / 100,
-      projected_month_end: Math.round(projected * 100) / 100,
+      projected_period_end: Math.round(projected * 100) / 100,
       variance: Math.round(variance * 100) / 100,
       pct_used: Math.round(pct),
       status,
@@ -1767,7 +2128,7 @@ async function getBudgetForecast(
         spent_to_date: Math.round(spent * 100) / 100,
         budget: null,
         daily_rate: Math.round(dailyRate * 100) / 100,
-        projected_month_end: Math.round(dailyRate * daysInMonth * 100) / 100,
+        projected_period_end: Math.round(dailyRate * totalDays * 100) / 100,
         variance: null,
         status: "no_budget",
       })
@@ -1780,10 +2141,9 @@ async function getBudgetForecast(
   })
 
   return JSON.stringify({
-    month,
-    year,
+    pay_period: period.label,
     days_elapsed: daysElapsed,
-    days_in_month: daysInMonth,
+    days_in_period: totalDays,
     categories: results,
     total_budget: Math.round(totalBudget * 100) / 100,
     total_projected: Math.round(totalProjected * 100) / 100,
@@ -1814,27 +2174,104 @@ async function checkRecurringReconciliation(
   const recurring = recurringRes.data ?? []
   const transactions = txRes.data ?? []
 
+  // Generic words to exclude from token matching — too common to be meaningful signals
+  const STOPWORDS = new Set([
+    "payment", "transfer", "fee", "loan", "charge", "pay", "auto",
+    "debit", "direct", "from", "the", "and", "for", "inc", "llc", "corp",
+    "bill", "billing", "monthly", "subscription",
+  ])
+
+  const getSpecificTokens = (name: string) =>
+    name.toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w))
+
+  const getAllTokens = (name: string) =>
+    name.toLowerCase().split(/\s+/).filter(w => w.length >= 3)
+
   const matched: Array<Record<string, unknown>> = []
   const missing: Array<Record<string, unknown>> = []
   const pending: Array<Record<string, unknown>> = []
 
+  // Track which transactions have been matched so we don't double-count
+  const matchedTxIds = new Set<string>()
+
   for (const expense of recurring) {
     if (expense.frequency !== "monthly" && expense.frequency !== "weekly" && expense.frequency !== "biweekly") continue
     const billingDay = (expense as any).billing_day as number | null
-    const nameKey = expense.name.toLowerCase().substring(0, 8)
+    const specificTokens = getSpecificTokens(expense.name)
+    const allTokens = getAllTokens(expense.name)
 
-    const match = transactions.find((tx) => {
-      const nameMatch = (tx.description ?? "").toLowerCase().includes(nameKey)
-      const amountMatch = expense.amount > 0 ? Math.abs(Number(tx.amount) - expense.amount) / expense.amount < 0.20 : true
-      return nameMatch && amountMatch
-    })
+    let foundMatch: { description: string; date: string; note?: string } | null = null
 
-    if (match) {
-      matched.push({ name: expense.name, amount: expense.amount, matched_tx: match.description, matched_date: match.date })
+    // Strategy 1: specific token + amount match (avoids generic word false positives)
+    if (specificTokens.length > 0) {
+      const tx = transactions.find(tx => {
+        if (matchedTxIds.has(tx.id)) return false
+        const desc = (tx.description ?? "").toLowerCase()
+        const hasSpecificToken = specificTokens.some(t => desc.includes(t))
+        const amountOk = expense.amount > 0
+          ? Math.abs(Number(tx.amount) - expense.amount) / expense.amount < 0.25
+          : true
+        return hasSpecificToken && amountOk
+      })
+      if (tx) {
+        matchedTxIds.add(tx.id)
+        foundMatch = { description: tx.description ?? "", date: tx.date }
+      }
+    }
+
+    // Strategy 2: broad token + tight amount match (fallback when no specific tokens)
+    if (!foundMatch && allTokens.length > 0) {
+      const tx = transactions.find(tx => {
+        if (matchedTxIds.has(tx.id)) return false
+        const desc = (tx.description ?? "").toLowerCase()
+        const hasToken = allTokens.some(t => desc.includes(t))
+        const amountOk = expense.amount > 0
+          ? Math.abs(Number(tx.amount) - expense.amount) / expense.amount < 0.05
+          : true
+        return hasToken && amountOk
+      })
+      if (tx) {
+        matchedTxIds.add(tx.id)
+        foundMatch = { description: tx.description ?? "", date: tx.date }
+      }
+    }
+
+    // Strategy 3: amount-only match within 2% BUT only for amounts > $50 (avoids small-amount false positives)
+    // Also requires same category or the transaction has no other match candidate
+    if (!foundMatch && expense.amount > 50) {
+      const tx = transactions.find(tx => {
+        if (matchedTxIds.has(tx.id)) return false
+        const amountClose = Math.abs(Number(tx.amount) - expense.amount) / expense.amount < 0.02
+        if (!amountClose) return false
+        // Prefer same-category match to reduce false positives
+        const sameCategory = tx.category && expense.category &&
+          tx.category.toLowerCase() === expense.category.toLowerCase()
+        return sameCategory
+      })
+      if (tx) {
+        matchedTxIds.add(tx.id)
+        foundMatch = { description: tx.description ?? "", date: tx.date, note: "matched by amount + category" }
+      }
+    }
+
+    // Strategy 4 removed — blind pair-sum matching produced too many false positives
+    // (e.g. Costco + Costco Gas matching to Therapy, random pairs summing to recurring amounts)
+
+    if (foundMatch) {
+      matched.push({
+        name: expense.name,
+        amount: expense.amount,
+        matched_tx: foundMatch.description,
+        matched_date: foundMatch.date,
+        ...(foundMatch.note ? { note: foundMatch.note } : {}),
+      })
     } else if (billingDay && billingDay <= today) {
       missing.push({ name: expense.name, amount: expense.amount, expected_day: billingDay, note: "Billing day passed — no matching transaction found" })
+    } else if (!billingDay) {
+      // No billing day set — can't determine if overdue or pending. Flag as unmatched with helpful note.
+      missing.push({ name: expense.name, amount: expense.amount, expected_day: "not set", note: "No billing_day configured — unable to determine if overdue. Set billing_day to improve tracking." })
     } else {
-      pending.push({ name: expense.name, amount: expense.amount, expected_day: billingDay ?? "unknown" })
+      pending.push({ name: expense.name, amount: expense.amount, expected_day: billingDay })
     }
   }
 
@@ -2183,4 +2620,763 @@ async function dismissAlert(
 
   if (error) return `Failed to dismiss alert: ${error.message}`
   return `Alert ${alertId} dismissed.`
+}
+
+// ── Goals ─────────────────────────────────────────────────────────────────────
+
+async function upsertGoal(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const title = String(input.title ?? "").trim()
+  if (!title) return "Title is required."
+
+  const payload = {
+    user_id: userId,
+    title,
+    description: input.description ? String(input.description).trim() : null,
+    category: String(input.category ?? "Financial"),
+    target_amount: input.target_amount != null ? Number(input.target_amount) : null,
+    current_amount: input.current_amount != null ? Number(input.current_amount) : 0,
+    target_date: input.target_date ? String(input.target_date) : null,
+    status: String(input.status ?? "active"),
+    priority: String(input.priority ?? "medium"),
+    updated_at: new Date().toISOString(),
+  }
+
+  const goalId = input.goal_id ? String(input.goal_id) : null
+
+  if (goalId) {
+    const { data, error } = await (supabase as any)
+      .from("goals").update(payload).eq("id", goalId).eq("user_id", userId).select().single()
+    if (error || !data) return `Failed to update goal: ${error?.message ?? "not found"}`
+    return `Goal updated: "${data.title}" — ${data.status}, ${data.category}`
+  } else {
+    const { data, error } = await (supabase as any)
+      .from("goals").insert(payload).select().single()
+    if (error || !data) return `Failed to create goal: ${error?.message}`
+    return `Goal created: "${data.title}" — ID: ${data.id}, priority: ${data.priority}`
+  }
+}
+
+// ── Dev requests ──────────────────────────────────────────────────────────────
+
+async function createDevRequest(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const title = String(input.title ?? "").trim()
+  const description = String(input.description ?? "").trim()
+  if (!title || !description) return "Title and description are required."
+
+  const validCategories = ["bug", "improvement", "feature", "question"]
+  const validPriorities = ["high", "medium", "low"]
+  const category = validCategories.includes(String(input.category)) ? String(input.category) : "improvement"
+  const priority = validPriorities.includes(String(input.priority)) ? String(input.priority) : "medium"
+
+  const { data, error } = await (supabase as any)
+    .from("dev_requests")
+    .insert({
+      user_id: userId,
+      title,
+      description,
+      category,
+      priority,
+      context: input.context ? String(input.context).slice(0, 500) : null,
+      status: "open",
+    })
+    .select()
+    .single()
+
+  if (error || !data) return `Failed to log dev request: ${error?.message}`
+  return `Dev request logged: "${data.title}" [${data.category}, ${data.priority} priority] — ID: ${data.id}. This will appear on the Goals page for the user to bring to Claude Code.`
+}
+
+// ── Usage insights ─────────────────────────────────────────────────────────────
+
+async function getUsageInsights(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const days = Math.min(Number(input.days ?? 30), 90)
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await (supabase as any)
+    .from("usage_events")
+    .select("event_type, page, feature, created_at")
+    .eq("user_id", userId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(500)
+
+  if (error) return `Failed to get usage data: ${error.message}`
+  if (!data || data.length === 0) return `No usage data in the last ${days} days yet. Usage tracking will accumulate as the user navigates the app.`
+
+  // Aggregate page visits
+  const pageCounts: Record<string, number> = {}
+  const featureCounts: Record<string, number> = {}
+  let lastVisit = ""
+
+  for (const event of data) {
+    if (event.page) pageCounts[event.page] = (pageCounts[event.page] ?? 0) + 1
+    if (event.feature) featureCounts[event.feature] = (featureCounts[event.feature] ?? 0) + 1
+    if (!lastVisit) lastVisit = event.created_at
+  }
+
+  const topPages = Object.entries(pageCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([page, count]) => `${page}: ${count} visits`)
+
+  const topFeatures = Object.entries(featureCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([feature, count]) => `${feature}: ${count} uses`)
+
+  return JSON.stringify({
+    period_days: days,
+    total_events: data.length,
+    last_activity: lastVisit,
+    most_visited_pages: topPages,
+    most_used_features: topFeatures,
+  })
+}
+
+// ── Delete record ─────────────────────────────────────────────────────────────
+
+const ALLOWED_DELETE_TABLES = [
+  "transactions", "debts", "bank_accounts", "recurring_expenses",
+  "insurance_policies", "investments", "budgets", "credit_accounts",
+  "tax_items", "income_sources", "business_engagements", "calendar_events",
+  "grocery_items", "goals", "dev_requests",
+  "weight_logs", "exercise_logs", "shared_list_items", "shared_lists", "shared_responsibilities",
+]
+
+// Tables that don't have a user_id column (shared household data)
+const SHARED_TABLES = ["grocery_items", "cleaning_duties", "shared_list_items", "shared_lists"]
+
+async function deleteRecord(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const table = String(input.table ?? "").trim()
+  const id = String(input.id ?? "").trim()
+
+  if (!ALLOWED_DELETE_TABLES.includes(table)) {
+    return `Error: "${table}" is not a deletable table. Allowed: ${ALLOWED_DELETE_TABLES.join(", ")}`
+  }
+  if (!id) return "Error: id is required."
+
+  let query = (supabase as any).from(table).delete().eq("id", id)
+  if (!SHARED_TABLES.includes(table)) query = query.eq("user_id", userId)
+
+  const { error } = await query
+  if (error) return `Failed to delete from ${table}: ${error.message}`
+
+  // Log audit event
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "record_deleted",
+    targetTable: table,
+    targetId: id,
+    details: { input },
+  })
+
+  return `Deleted record ${id} from ${table}.`
+}
+
+// ── Update calendar event ─────────────────────────────────────────────────────
+
+async function updateCalendarEvent(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const eventId = String(input.event_id ?? "").trim()
+  if (!eventId) return "Error: event_id is required."
+
+  const updates: Record<string, unknown> = {}
+  if (input.title !== undefined) updates.title = String(input.title)
+  if (input.start_at !== undefined) updates.start_at = String(input.start_at)
+  if (input.end_at !== undefined) updates.end_at = String(input.end_at)
+  if (input.description !== undefined) updates.description = String(input.description)
+  if (input.all_day !== undefined) updates.all_day = Boolean(input.all_day)
+
+  if (Object.keys(updates).length === 0) return "No fields provided to update."
+
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .update(updates as never)
+    .eq("id", eventId)
+    .eq("user_id", userId)
+    .eq("source", "homebase")
+    .select()
+    .single()
+
+  if (error || !data) return `Failed to update event: ${error?.message ?? "not found or not a Mita event (can't edit Google/shared list events)"}`
+  return `Event updated: "${data.title}" on ${new Date(data.start_at).toLocaleDateString()}`
+}
+
+// ── Toggle shopping item ──────────────────────────────────────────────────────
+
+async function toggleShoppingItem(
+  supabase: SupabaseClient<Database>,
+  input: Record<string, unknown>
+): Promise<string> {
+  const itemId = String(input.item_id ?? "").trim()
+  if (!itemId) return "Error: item_id is required."
+
+  const checked = Boolean(input.checked)
+  const moveToPantry = Boolean(input.move_to_pantry)
+
+  const updates: Record<string, unknown> = { checked }
+  if (moveToPantry) updates.in_pantry = true
+
+  const { data, error } = await supabase
+    .from("grocery_items")
+    .update(updates as never)
+    .eq("id", itemId)
+    .select()
+    .single()
+
+  if (error || !data) return `Failed to update item: ${error?.message ?? "not found"}`
+  const status = checked ? "checked off" : "unchecked"
+  const pantryNote = moveToPantry ? " and moved to pantry" : ""
+  return `"${data.name}" ${status}${pantryNote}.`
+}
+
+// ── Complete cleaning duty ────────────────────────────────────────────────────
+
+async function completeCleaningDuty(
+  supabase: SupabaseClient<Database>,
+  input: Record<string, unknown>
+): Promise<string> {
+  const dutyId = String(input.duty_id ?? "").trim()
+  if (!dutyId) return "Error: duty_id is required."
+
+  const { data: duty, error: fetchError } = await supabase
+    .from("cleaning_duties")
+    .select("id, name, frequency")
+    .eq("id", dutyId)
+    .single()
+
+  if (fetchError || !duty) return `Failed to find cleaning duty: ${fetchError?.message ?? "not found"}`
+
+  const now = new Date()
+  const nextDue = new Date(now)
+  const freq = (duty.frequency ?? "").toLowerCase()
+
+  if (freq === "daily") nextDue.setDate(nextDue.getDate() + 1)
+  else if (freq === "every other day") nextDue.setDate(nextDue.getDate() + 2)
+  else if (freq === "weekly") nextDue.setDate(nextDue.getDate() + 7)
+  else if (freq === "biweekly" || freq === "every 2 weeks") nextDue.setDate(nextDue.getDate() + 14)
+  else if (freq === "monthly") nextDue.setMonth(nextDue.getMonth() + 1)
+  else if (freq === "quarterly") nextDue.setMonth(nextDue.getMonth() + 3)
+  else if (freq === "annually" || freq === "yearly") nextDue.setFullYear(nextDue.getFullYear() + 1)
+  else nextDue.setDate(nextDue.getDate() + 7) // default weekly
+
+  const nextDueStr = nextDue.toISOString().split("T")[0]
+
+  const { error } = await supabase
+    .from("cleaning_duties")
+    .update({ last_completed: now.toISOString(), next_due: nextDueStr } as never)
+    .eq("id", dutyId)
+
+  if (error) return `Failed to mark duty complete: ${error.message}`
+  return `"${duty.name}" marked complete. Next due: ${nextDueStr}.`
+}
+
+// ── Shared finances ───────────────────────────────────────────────────────────
+
+async function getSharedFinances(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  _input: Record<string, unknown>
+): Promise<string> {
+  const [accountsRes, responsibilitiesRes, profilesRes] = await Promise.all([
+    (supabase as any).from("bank_accounts").select("id, name, balance, currency").eq("is_shared", true),
+    (supabase as any).from("shared_responsibilities").select("account_id, user_id, percentage"),
+    supabase.from("profiles").select("id, full_name"),
+  ])
+
+  const profiles = new Map((profilesRes.data ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? "Unknown"]))
+  const accounts = accountsRes.data ?? []
+  const responsibilities = responsibilitiesRes.data ?? []
+
+  if (accounts.length === 0) return "No shared accounts found. Mark a bank account as shared (is_shared=true) to start tracking shared finances."
+
+  // Get recent transactions for shared accounts
+  const accountIds = accounts.map((a: { id: string }) => a.id)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  const { data: txData } = await supabase
+    .from("transactions")
+    .select("date, type, amount, description, category, account_id")
+    .in("account_id", accountIds)
+    .gte("date", thirtyDaysAgo)
+    .order("date", { ascending: false })
+    .limit(30)
+
+  const lines: string[] = ["## Shared Accounts"]
+  for (const a of accounts) {
+    lines.push(`\n### ${a.name}: $${Number(a.balance).toFixed(2)} ${a.currency}`)
+    const splits = responsibilities.filter((r: { account_id: string }) => r.account_id === a.id)
+    if (splits.length) {
+      for (const s of splits) {
+        const name = profiles.get(s.user_id) ?? s.user_id
+        lines.push(`- ${name}: ${s.percentage}%`)
+      }
+    } else {
+      lines.push("- No responsibility splits set")
+    }
+    const acctTx = (txData ?? []).filter((t) => t.account_id === a.id)
+    if (acctTx.length) {
+      lines.push(`\nRecent transactions:`)
+      for (const t of acctTx.slice(0, 10)) {
+        const sign = t.type === "income" ? "+" : "-"
+        lines.push(`- ${t.date}: ${sign}$${t.amount.toFixed(2)} ${t.description}${t.category ? ` [${t.category}]` : ""}`)
+      }
+    }
+  }
+  return lines.join("\n")
+}
+
+// ── Update shared responsibility ──────────────────────────────────────────────
+
+async function updateSharedResponsibility(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const accountId = String(input.account_id ?? "").trim()
+  const targetUserId = String(input.user_id ?? "").trim()
+  const percentage = Number(input.percentage ?? 0)
+
+  if (!accountId) return "Error: account_id is required."
+  if (!targetUserId) return "Error: user_id is required."
+  if (percentage < 0 || percentage > 100) return "Error: percentage must be between 0 and 100."
+
+  const { error } = await (supabase as any)
+    .from("shared_responsibilities")
+    .upsert(
+      { account_id: accountId, user_id: targetUserId, percentage },
+      { onConflict: "account_id,user_id" }
+    )
+
+  if (error) return `Failed to update responsibility: ${error.message}`
+
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "shared_responsibility_updated",
+    targetTable: "shared_responsibilities",
+    details: { account_id: accountId, target_user_id: targetUserId, percentage },
+  })
+
+  return `Set ${percentage}% responsibility for user ${targetUserId} on account ${accountId}.`
+}
+
+// ── Log weight ────────────────────────────────────────────────────────────────
+
+async function logWeight(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const weight = Number(input.weight)
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 1000) return "Error: Invalid weight value."
+
+  const date = String(input.date ?? new Date().toISOString().split("T")[0])
+  const notes = input.notes ? String(input.notes) : null
+
+  const { data, error } = await (supabase as any)
+    .from("weight_logs")
+    .upsert(
+      { user_id: userId, weight, date, notes },
+      { onConflict: "user_id,date" }
+    )
+    .select()
+    .single()
+
+  if (error) return `Failed to log weight: ${error.message}`
+
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "weight_logged",
+    targetTable: "weight_logs",
+    targetId: data.id,
+    details: { weight, date },
+  })
+
+  return `Logged ${weight} lbs for ${date}.`
+}
+
+// ── Log exercise ──────────────────────────────────────────────────────────────
+
+async function logExercise(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const exerciseType = String(input.type ?? "").trim()
+  if (!exerciseType) return "Error: exercise type is required."
+
+  const date = String(input.date ?? new Date().toISOString().split("T")[0])
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    type: exerciseType,
+    date,
+  }
+  if (input.duration_minutes != null) row.duration_minutes = Number(input.duration_minutes)
+  if (input.distance != null) row.distance = Number(input.distance)
+  if (input.calories != null) row.calories = Number(input.calories)
+  if (input.notes) row.notes = String(input.notes)
+
+  const { data, error } = await (supabase as any)
+    .from("exercise_logs")
+    .insert(row)
+    .select()
+    .single()
+
+  if (error) return `Failed to log exercise: ${error.message}`
+
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "exercise_logged",
+    targetTable: "exercise_logs",
+    targetId: data.id,
+    details: { type: exerciseType, duration_minutes: row.duration_minutes, date },
+  })
+
+  const parts = [`Logged ${exerciseType} for ${date}`]
+  if (row.duration_minutes) parts.push(`${row.duration_minutes} min`)
+  if (row.distance) parts.push(`${row.distance} mi`)
+  if (row.calories) parts.push(`${row.calories} cal`)
+  return parts.join(" — ") + "."
+}
+
+// ── Get health data ───────────────────────────────────────────────────────────
+
+async function getHealthData(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const days = Math.min(Number(input.days ?? 30), 365)
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  const filterUser = input.user_id ? String(input.user_id) : null
+
+  let weightQuery = (supabase as any)
+    .from("weight_logs")
+    .select("user_id, weight, date, notes")
+    .gte("date", since)
+    .order("date", { ascending: false })
+    .limit(60)
+
+  let exerciseQuery = (supabase as any)
+    .from("exercise_logs")
+    .select("user_id, type, duration_minutes, distance, calories, date, notes")
+    .gte("date", since)
+    .order("date", { ascending: false })
+    .limit(60)
+
+  if (filterUser) {
+    weightQuery = weightQuery.eq("user_id", filterUser)
+    exerciseQuery = exerciseQuery.eq("user_id", filterUser)
+  }
+
+  const [weightRes, exerciseRes, profilesRes] = await Promise.all([
+    weightQuery,
+    exerciseQuery,
+    supabase.from("profiles").select("id, full_name"),
+  ])
+
+  const profiles = new Map((profilesRes.data ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? "Unknown"]))
+  const weights = weightRes.data ?? []
+  const exercises = exerciseRes.data ?? []
+
+  const lines: string[] = [`## Health Data (last ${days} days)`]
+
+  if (weights.length) {
+    lines.push("\n### Weight Log")
+    // Show latest per user
+    const latestByUser = new Map<string, { weight: number; date: string }>()
+    for (const w of weights) {
+      if (!latestByUser.has(w.user_id)) latestByUser.set(w.user_id, { weight: w.weight, date: w.date })
+    }
+    for (const [uid, latest] of latestByUser) {
+      lines.push(`**${profiles.get(uid) ?? uid}**: ${latest.weight} lbs (as of ${latest.date})`)
+    }
+    lines.push("\nAll entries:")
+    for (const w of weights) {
+      const name = profiles.get(w.user_id) ?? w.user_id
+      lines.push(`- ${w.date}: ${name} — ${w.weight} lbs${w.notes ? ` (${w.notes})` : ""}`)
+    }
+  } else {
+    lines.push("\nNo weight entries found.")
+  }
+
+  if (exercises.length) {
+    lines.push("\n### Exercise Log")
+    const totalByType: Record<string, number> = {}
+    for (const e of exercises) {
+      totalByType[e.type] = (totalByType[e.type] ?? 0) + 1
+    }
+    lines.push(`Summary: ${Object.entries(totalByType).map(([t, c]) => `${t} x${c}`).join(", ")}`)
+    lines.push("\nRecent:")
+    for (const e of exercises.slice(0, 20)) {
+      const name = profiles.get(e.user_id) ?? e.user_id
+      const parts = [e.type]
+      if (e.duration_minutes) parts.push(`${e.duration_minutes} min`)
+      if (e.distance) parts.push(`${e.distance} mi`)
+      if (e.calories) parts.push(`${e.calories} cal`)
+      lines.push(`- ${e.date}: ${name} — ${parts.join(", ")}${e.notes ? ` (${e.notes})` : ""}`)
+    }
+  } else {
+    lines.push("\nNo exercise entries found.")
+  }
+
+  return lines.join("\n")
+}
+
+// ── Send household message ────────────────────────────────────────────────────
+
+async function sendHouseholdMessage(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const content = String(input.content ?? "").trim()
+  if (!content) return "Error: message content is required."
+  if (content.length > 2000) return "Error: message too long (max 2000 chars)."
+
+  const { data, error } = await (supabase as any)
+    .from("household_messages")
+    .insert({ sender_id: userId, content })
+    .select()
+    .single()
+
+  if (error) return `Failed to send message: ${error.message}`
+
+  const { insertAuditLog } = await import("@/lib/audit")
+  await insertAuditLog({
+    userId,
+    action: "household_message_sent",
+    targetTable: "household_messages",
+    targetId: data.id,
+    details: { content_preview: content.slice(0, 50) },
+  })
+
+  return `Message sent.`
+}
+
+// ── Manage shared list ────────────────────────────────────────────────────────
+
+async function manageSharedList(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const action = String(input.action ?? "").trim()
+  const { insertAuditLog } = await import("@/lib/audit")
+
+  switch (action) {
+    case "create": {
+      const name = String(input.name ?? "").trim()
+      if (!name) return "Error: name is required for create."
+
+      const { data, error } = await (supabase as any)
+        .from("shared_lists")
+        .insert({ name, created_by: userId })
+        .select()
+        .single()
+
+      if (error) return `Failed to create list: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_created",
+        targetTable: "shared_lists",
+        targetId: data.id,
+        details: { name },
+      })
+      return `Created shared list "${name}" [id: ${data.id}].`
+    }
+    case "update": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for update."
+      const updates: Record<string, unknown> = {}
+      if (input.name) updates.name = String(input.name)
+      if (Object.keys(updates).length === 0) return "No fields to update."
+
+      const { data, error } = await (supabase as any)
+        .from("shared_lists")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) return `Failed to update list: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_updated",
+        targetTable: "shared_lists",
+        targetId: id,
+        details: updates,
+      })
+      return `Updated list "${data.name}".`
+    }
+    case "delete": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for delete."
+
+      const { error } = await (supabase as any)
+        .from("shared_lists")
+        .delete()
+        .eq("id", id)
+
+      if (error) return `Failed to delete list: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_deleted",
+        targetTable: "shared_lists",
+        targetId: id,
+        details: {},
+      })
+      return `Deleted shared list ${id}.`
+    }
+    default:
+      return `Error: invalid action "${action}". Use create, update, or delete.`
+  }
+}
+
+// ── Manage shared list item ───────────────────────────────────────────────────
+
+async function manageSharedListItem(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<string> {
+  const action = String(input.action ?? "").trim()
+  const { insertAuditLog } = await import("@/lib/audit")
+
+  switch (action) {
+    case "add": {
+      const listId = String(input.list_id ?? "").trim()
+      const title = String(input.title ?? "").trim()
+      if (!listId) return "Error: list_id is required for add."
+      if (!title) return "Error: title is required for add."
+
+      const row: Record<string, unknown> = { list_id: listId, title, created_by: userId }
+      if (input.due_date) row.due_date = String(input.due_date)
+      if (input.assigned_to) row.assigned_to = String(input.assigned_to)
+
+      const { data, error } = await (supabase as any)
+        .from("shared_list_items")
+        .insert(row)
+        .select()
+        .single()
+
+      if (error) return `Failed to add item: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_item_added",
+        targetTable: "shared_list_items",
+        targetId: data.id,
+        details: { list_id: listId, title },
+      })
+      return `Added "${title}" to list [item id: ${data.id}].`
+    }
+    case "update": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for update."
+      const updates: Record<string, unknown> = {}
+      if (input.title !== undefined) updates.title = String(input.title)
+      if (input.due_date !== undefined) updates.due_date = input.due_date ? String(input.due_date) : null
+      if (input.assigned_to !== undefined) updates.assigned_to = input.assigned_to ? String(input.assigned_to) : null
+      if (Object.keys(updates).length === 0) return "No fields to update."
+
+      const { data, error } = await (supabase as any)
+        .from("shared_list_items")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) return `Failed to update item: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_item_updated",
+        targetTable: "shared_list_items",
+        targetId: id,
+        details: updates,
+      })
+      return `Updated item "${data.title}".`
+    }
+    case "check": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for check."
+      const { data, error } = await (supabase as any)
+        .from("shared_list_items")
+        .update({ checked: true })
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) return `Failed to check item: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_item_checked",
+        targetTable: "shared_list_items",
+        targetId: id,
+        details: {},
+      })
+      return `Checked off "${data.title}".`
+    }
+    case "uncheck": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for uncheck."
+      const { data, error } = await (supabase as any)
+        .from("shared_list_items")
+        .update({ checked: false })
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) return `Failed to uncheck item: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_item_unchecked",
+        targetTable: "shared_list_items",
+        targetId: id,
+        details: {},
+      })
+      return `Unchecked "${data.title}".`
+    }
+    case "delete": {
+      const id = String(input.id ?? "").trim()
+      if (!id) return "Error: id is required for delete."
+      const { error } = await (supabase as any)
+        .from("shared_list_items")
+        .delete()
+        .eq("id", id)
+
+      if (error) return `Failed to delete item: ${error.message}`
+      await insertAuditLog({
+        userId,
+        action: "shared_list_item_deleted",
+        targetTable: "shared_list_items",
+        targetId: id,
+        details: {},
+      })
+      return `Deleted item ${id}.`
+    }
+    default:
+      return `Error: invalid action "${action}". Use add, update, check, uncheck, or delete.`
+  }
 }

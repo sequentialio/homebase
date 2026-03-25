@@ -8,27 +8,24 @@ export default async function CalendarPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
+  const admin = createAdminClient()
   const [
     { data: calendarEvents },
     { data: cleaningDuties },
+    { data: googleConn },
+    { data: sharedListItems },
   ] = await Promise.all([
     supabase.from("calendar_events").select("*"),
     supabase.from("cleaning_duties").select("id, name, next_due"),
-  ])
-
-  // Check integrations
-  const admin = createAdminClient()
-  const [{ data: asanaConn }, { data: googleConn }] = await Promise.all([
-    admin
-      .from("asana_connections")
-      .select("workspace_id, workspace_name")
-      .eq("user_id", user.id)
-      .single(),
     admin
       .from("google_calendar_connections")
       .select("user_id")
       .eq("user_id", user.id)
       .single(),
+    (supabase as any)
+      .from("shared_list_items")
+      .select("id, title, due_date, checked, list_id, shared_lists(name)")
+      .not("due_date", "is", null),
   ])
 
   return (
@@ -36,8 +33,8 @@ export default async function CalendarPage() {
       userId={user.id}
       initialEvents={calendarEvents ?? []}
       cleaningDuties={cleaningDuties ?? []}
-      hasAsana={!!asanaConn?.workspace_id}
       hasGoogle={!!googleConn}
+      sharedListItems={sharedListItems ?? []}
     />
   )
 }

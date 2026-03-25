@@ -54,6 +54,7 @@ export function AssistantContent({ userName }: AssistantContentProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const userScrolledUpRef = useRef(false)
   const lastMessageCountRef = useRef(0)
+  const wasStreamingRef = useRef(false)
 
   // Track whether user has manually scrolled away from bottom
   useEffect(() => {
@@ -71,13 +72,22 @@ export function AssistantContent({ userName }: AssistantContentProps) {
   useEffect(() => {
     const newMessageArrived = messages.length > lastMessageCountRef.current
     lastMessageCountRef.current = messages.length
+    const streamingJustStarted = isStreaming && !wasStreamingRef.current
+    wasStreamingRef.current = isStreaming
 
-    // Always scroll on a new message (user sent or assistant started responding)
-    // Only follow streaming if user hasn't scrolled up
-    if (newMessageArrived || !userScrolledUpRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: newMessageArrived ? "smooth" : "instant" })
+    if (streamingJustStarted) {
+      // User just sent — scroll to bottom and reset lock
+      userScrolledUpRef.current = false
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    } else if (newMessageArrived && !isStreaming) {
+      // Non-streaming new message (e.g. system message)
+      userScrolledUpRef.current = false
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    } else if (!userScrolledUpRef.current) {
+      // During streaming: only follow if user hasn't scrolled up
+      bottomRef.current?.scrollIntoView({ behavior: "instant" })
     }
-  }, [messages, activeTools])
+  }, [messages, activeTools, isStreaming])
 
   // ── File handling ──────────────────────────────────────────────────────────
 

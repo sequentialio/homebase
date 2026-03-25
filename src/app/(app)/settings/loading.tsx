@@ -13,7 +13,7 @@ export default function SettingsLoading() {
         </div>
         <Skeleton className="h-9 w-24" />
       </div>
-      {/* Asana section */}
+      {/* Integration section */}
       <div className="rounded-lg border p-6 space-y-4">
         <Skeleton className="h-5 w-36" />
         <Skeleton className="h-4 w-64" />

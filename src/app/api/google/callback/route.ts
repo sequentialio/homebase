@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { encrypt } from "@/lib/google/client"
+import { insertAuditLog } from "@/lib/audit"
 import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
@@ -97,6 +98,20 @@ export async function GET(request: NextRequest) {
       console.error("Failed to save Google connection:", upsertError)
       return NextResponse.redirect(`${settingsUrl}&status=error&reason=db_error`)
     }
+
+    // Log audit event
+    const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+    await insertAuditLog({
+      userId: user.id,
+      action: "oauth_token_stored",
+      targetTable: "google_calendar_connections",
+      details: {
+        provider: "google",
+        email,
+        expires_at: expiresAt,
+      },
+      ipAddress,
+    })
 
     return NextResponse.redirect(`${settingsUrl}&status=connected`)
   } catch (err) {

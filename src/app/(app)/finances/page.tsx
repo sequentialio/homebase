@@ -30,7 +30,7 @@ export default async function FinancesPage() {
       .from("transactions")
       .select("*")
       .order("date", { ascending: false })
-      .limit(200),
+      .limit(2000),
     supabase.from("bank_accounts").select("*").order("section_id").order("position"),
     supabase.from("account_sections").select("*").order("position"),
     supabase.from("budgets").select("*").order("section_id").order("position"),

@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/format-utils"
 import { CREDIT_ACCOUNT_TYPES, CREDIT_ACCOUNT_TYPE_LABELS, RATING_COLORS } from "./constants"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, CreditCard, Building2 } from "lucide-react"
+import { Plus, Pencil, Trash2, CreditCard, Building2, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -50,6 +50,7 @@ type CreditAccount = {
   status: string
   lender: string | null
   notes: string | null
+  linked_debt_id: string | null
   created_at: string
 }
 
@@ -418,7 +419,12 @@ export function CreditsTab({ userId, initialAccounts, initialProfile }: CreditsT
                   return (
                     <TableRow key={a.id}>
                       <TableCell className="font-medium text-sm">{a.name}</TableCell>
-                      <TableCell className="text-sm whitespace-nowrap">{formatCurrency(Number(a.balance))}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1">
+                          {formatCurrency(Number(a.balance))}
+                          {a.linked_debt_id && <span title="Synced with Debts tab"><Link2 className="size-3 text-muted-foreground" /></span>}
+                        </span>
+                      </TableCell>
                       <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">
                         {a.credit_limit ? formatCurrency(Number(a.credit_limit)) : "—"}
                       </TableCell>
@@ -475,7 +481,12 @@ export function CreditsTab({ userId, initialAccounts, initialProfile }: CreditsT
                   <TableRow key={a.id}>
                     <TableCell className="font-medium text-sm">{a.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{CREDIT_ACCOUNT_TYPE_LABELS[a.type] ?? a.type}</TableCell>
-                    <TableCell className="text-sm whitespace-nowrap">{formatCurrency(Number(a.balance))}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1">
+                        {formatCurrency(Number(a.balance))}
+                        {a.linked_debt_id && <span title="Synced with Debts tab"><Link2 className="size-3 text-muted-foreground" /></span>}
+                      </span>
+                    </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <Badge variant={a.status === "open" ? "default" : "secondary"} className="text-[10px]">
                         {a.status === "open" ? "Open" : "Closed"}

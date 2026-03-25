@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { Sun, Moon, Bell, X } from "lucide-react"
+import { useState, useEffect } from "react"
 import { useUser } from "@/hooks/use-user"
 import { useAlerts } from "@/hooks/use-alerts"
 import { AppSidebar } from "./app-sidebar"
@@ -29,6 +30,8 @@ export function AppShell({ children, initialProfile }: AppShellProps) {
   const { profile, roleOverride } = useUser(initialProfile)
   const { theme, setTheme } = useTheme()
   const { alerts, unreadCount, dismiss } = useAlerts()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -50,8 +53,8 @@ export function AppShell({ children, initialProfile }: AppShellProps) {
           </Link>
           <div className="hidden md:block" />
           <div className="flex items-center gap-1.5 md:gap-3">
-            {/* Alert bell */}
-            <Popover>
+            {/* Alert bell — Popover uses Radix useId which mismatches on SSR; only render after mount */}
+            {mounted ? <Popover>
               <PopoverTrigger asChild>
                 <button
                   aria-label="Notifications"
@@ -102,7 +105,11 @@ export function AppShell({ children, initialProfile }: AppShellProps) {
                   </div>
                 )}
               </PopoverContent>
-            </Popover>
+            </Popover> : (
+              <button aria-label="Notifications" className="relative !size-8 !min-h-0 sm:!size-auto sm:!min-h-[unset] size-8 md:size-9 rounded-full flex items-center justify-center transition-colors text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent md:text-muted-foreground md:hover:text-foreground md:hover:bg-accent">
+                <Bell className="size-[18px]" />
+              </button>
+            )}
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               aria-label="Toggle dark mode"

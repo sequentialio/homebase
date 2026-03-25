@@ -6,11 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/format-utils"
+import { getCurrentPayPeriod, getAdjacentPayPeriod, type PayPeriod } from "@/lib/pay-period"
 import { EXPENSE_CATEGORIES } from "./constants"
 import { toast } from "sonner"
 import {
   Plus, Pencil, Trash2, GripVertical, ChevronDown, ChevronRight,
-  MoreHorizontal, FolderPlus,
+  ChevronLeft, MoreHorizontal, FolderPlus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,7 +56,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import type { Tables } from "@/types/database"
 
-type Budget = Tables<"budgets">
+type Budget = Tables<"budgets"> & { period_limit?: number }
 type BudgetSection = Tables<"budget_sections">
 type Transaction = Tables<"transactions">
 
@@ -64,16 +65,9 @@ interface SectionState extends BudgetSection {
   collapsed: boolean
 }
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-]
-
 const budgetSchema = z.object({
   category: z.string().min(1, "Category is required"),
-  monthly_limit: z.number().positive("Limit must be greater than 0"),
-  month: z.number().min(1).max(12),
-  year: z.number().min(2020),
+  period_limit: z.number().positive("Limit must be greater than 0"),
   section_id: z.string().nullable(),
 })
 type FormValues = z.infer<typeof budgetSchema>
@@ -119,7 +113,7 @@ function SortableBudgetRow({ budget, spent, onEdit, onDelete, deleting }: Sortab
     opacity: isDragging ? 0.4 : 1,
   }
 
-  const limit = Number(budget.monthly_limit)
+  const limit = Number((budget as any).period_limit)
   const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0
   const over = spent > limit
 
@@ -180,8 +174,6 @@ function SortableBudgetRow({ budget, spent, onEdit, onDelete, deleting }: Sortab
 interface SectionBlockProps {
   section: SectionState
   spendingByCategory: Record<string, number>
-  viewMonth: number
-  viewYear: number
   deleting: string | null
   onToggleCollapse: (id: string) => void
   onRename: (id: string, name: string) => void
@@ -194,8 +186,6 @@ interface SectionBlockProps {
 function SectionBlock({
   section,
   spendingByCategory,
-  viewMonth,
-  viewYear,
   deleting,
   onToggleCollapse,
   onRename,
@@ -207,10 +197,7 @@ function SectionBlock({
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(section.name)
 
-  const monthBudgets = section.budgets.filter(
-    (b) => b.month === viewMonth && b.year === viewYear
-  )
-  const sectionTotal = monthBudgets.reduce((sum, b) => sum + Number(b.monthly_limit), 0)
+  const sectionTotal = section.budgets.reduce((sum, b) => sum + Number(b.period_limit), 0)
 
   function commitRename() {
     const trimmed = nameValue.trim()
@@ -259,7 +246,7 @@ function SectionBlock({
         )}
 
         <span className="text-xs text-muted-foreground ml-1">
-          {monthBudgets.length} · {formatCurrency(sectionTotal)}
+          {section.budgets.length} · {formatCurrency(sectionTotal)}
         </span>
 
         <DropdownMenu>
@@ -289,16 +276,16 @@ function SectionBlock({
       {/* Budget rows */}
       {!section.collapsed && (
         <SortableContext
-          items={monthBudgets.map((b) => b.id)}
+          items={section.budgets.map((b) => b.id)}
           strategy={verticalListSortingStrategy}
         >
           <div className="space-y-2 pl-5">
-            {monthBudgets.length === 0 ? (
+            {section.budgets.length === 0 ? (
               <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground text-xs">
-                No budgets for {MONTHS[viewMonth - 1]} {viewYear} — add one
+                No budgets in this section — add one
               </div>
             ) : (
-              monthBudgets.map((b) => (
+              section.budgets.map((b) => (
                 <SortableBudgetRow
                   key={b.id}
                   budget={b}
@@ -349,25 +336,21 @@ export function BudgetsTab({
 
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  const now = new Date()
-  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1)
-  const [viewYear, setViewYear] = useState(now.getFullYear())
+  // Pay period navigation
+  const [period, setPeriod] = useState<PayPeriod>(() => getCurrentPayPeriod())
 
   const spendingByCategory = useMemo(() => {
     const map: Record<string, number> = {}
     transactions.forEach((t) => {
       if (t.type !== "expense" || !t.category || !t.date) return
-      const [y, m] = t.date.split("-").map(Number)
-      if (y === viewYear && m === viewMonth) {
+      if (t.date >= period.start && t.date <= period.end) {
         map[t.category] = (map[t.category] ?? 0) + Number(t.amount)
       }
     })
     return map
-  }, [transactions, viewMonth, viewYear])
+  }, [transactions, period])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-
-  const years = Array.from({ length: 3 }, (_, i) => now.getFullYear() - i + 1)
 
   // Find which container owns a budget id
   function findContainer(id: string): string {
@@ -511,9 +494,7 @@ export function BudgetsTab({
     resolver: zodResolver(budgetSchema),
     defaultValues: {
       category: "",
-      monthly_limit: 0,
-      month: now.getMonth() + 1,
-      year: now.getFullYear(),
+      period_limit: 0,
       section_id: null,
     },
   })
@@ -521,9 +502,7 @@ export function BudgetsTab({
   function openAdd(sectionId?: string) {
     form.reset({
       category: "",
-      monthly_limit: 0,
-      month: viewMonth,
-      year: viewYear,
+      period_limit: 0,
       section_id: sectionId ?? null,
     })
     setEditing(null)
@@ -533,9 +512,7 @@ export function BudgetsTab({
   function openEdit(b: Budget) {
     form.reset({
       category: b.category,
-      monthly_limit: Number(b.monthly_limit),
-      month: b.month,
-      year: b.year,
+      period_limit: Number(b.period_limit),
       section_id: b.section_id ?? null,
     })
     setEditing(b)
@@ -545,16 +522,14 @@ export function BudgetsTab({
   async function onSubmit(values: FormValues) {
     const payload = {
       category: values.category,
-      monthly_limit: values.monthly_limit,
-      month: values.month,
-      year: values.year,
+      period_limit: values.period_limit,
       section_id: values.section_id,
     }
 
     if (editing) {
       const { data, error } = await supabase
         .from("budgets")
-        .update(payload)
+        .update(payload as never)
         .eq("id", editing.id)
         .select()
         .single()
@@ -584,7 +559,7 @@ export function BudgetsTab({
         : unsectioned.length
       const { data, error } = await supabase
         .from("budgets")
-        .insert({ ...payload, position, user_id: userId })
+        .insert({ ...payload, position, user_id: userId } as never)
         .select()
         .single()
       if (error) { toast.error("Failed to add budget"); return }
@@ -653,35 +628,48 @@ export function BudgetsTab({
     )
   }
 
-  const unsectionedMonth = unsectioned.filter(
-    (b) => b.month === viewMonth && b.year === viewYear
-  )
+  const currentPeriod = getCurrentPayPeriod()
+  const isCurrentPeriod = period.start === currentPeriod.start
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2">
-          <Select value={String(viewMonth)} onValueChange={(v) => setViewMonth(Number(v))}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={String(viewYear)} onValueChange={(v) => setViewYear(Number(v))}>
-            <SelectTrigger className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((y) => (
-                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Pay period navigator */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="!size-8 !min-h-0"
+            onClick={() => setPeriod(getAdjacentPayPeriod(period.start, "prev"))}
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <button
+            className="text-sm font-medium px-2 py-1 rounded-md hover:bg-muted transition-colors"
+            onClick={() => setPeriod(currentPeriod)}
+            title="Go to current pay period"
+          >
+            {period.label}
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="!size-8 !min-h-0"
+            onClick={() => setPeriod(getAdjacentPayPeriod(period.start, "next"))}
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+          {!isCurrentPeriod && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setPeriod(currentPeriod)}
+            >
+              Today
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setNewSectionOpen(true)}>
@@ -708,8 +696,6 @@ export function BudgetsTab({
               key={section.id}
               section={section}
               spendingByCategory={spendingByCategory}
-              viewMonth={viewMonth}
-              viewYear={viewYear}
               deleting={deleting}
               onToggleCollapse={toggleCollapse}
               onRename={handleRenameSection}
@@ -721,7 +707,7 @@ export function BudgetsTab({
           ))}
 
           {/* Unsectioned */}
-          {(unsectionedMonth.length > 0 || sections.length === 0) && (
+          {(unsectioned.length > 0 || sections.length === 0) && (
             <div className="space-y-2">
               {sections.length > 0 && (
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -729,16 +715,16 @@ export function BudgetsTab({
                 </p>
               )}
               <SortableContext
-                items={unsectionedMonth.map((b) => b.id)}
+                items={unsectioned.map((b) => b.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-2">
-                  {unsectionedMonth.length === 0 ? (
+                  {unsectioned.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground text-sm">
-                      No budgets for {MONTHS[viewMonth - 1]} {viewYear}
+                      No budgets yet — add one to start tracking
                     </div>
                   ) : (
-                    unsectionedMonth.map((b) => (
+                    unsectioned.map((b) => (
                       <SortableBudgetRow
                         key={b.id}
                         budget={b}
@@ -795,40 +781,14 @@ export function BudgetsTab({
               )}
             </div>
             <div className="space-y-1.5">
-              <Label>Monthly Limit ($)</Label>
+              <Label>Pay Period Limit ($)</Label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="0.00"
-                {...form.register("monthly_limit", { valueAsNumber: true })}
+                {...form.register("period_limit", { valueAsNumber: true })}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Month</Label>
-                <Select
-                  value={String(form.watch("month"))}
-                  onValueChange={(v) => form.setValue("month", Number(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((m, i) => (
-                      <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Year</Label>
-                <Input
-                  type="number"
-                  placeholder="2026"
-                  {...form.register("year", { valueAsNumber: true })}
-                />
-              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Section</Label>

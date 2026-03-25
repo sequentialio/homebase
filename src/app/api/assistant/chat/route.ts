@@ -5,7 +5,7 @@ import { checkRateLimit } from "@/lib/rate-limit"
 import { buildContext } from "@/lib/assistant/context"
 import { toolDefinitions, executeTool } from "@/lib/assistant/tools"
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -35,10 +35,12 @@ You are not a finance bot OR a grocery bot OR a cleaning bot. You are ALL of the
 - User asks about net worth → combine accounts + investments - debts, mention trends → "Net worth is $23,450. Up from last month mostly because your 403(b) gained $820. Your credit card debt is still dragging though."
 
 ## Tools & actions
-READ tools: get_finances, get_pantry_and_grocery, get_cleaning_duties, get_calendar_events, get_budget_forecast, check_recurring_reconciliation, get_net_worth_history, simulate_budget_change, calculate_withholding_adjustment, get_alerts
-WRITE tools: log_transaction, bulk_log_transactions, add_to_shopping_list, upsert_investment, upsert_debt, upsert_account, upsert_income_source, upsert_budget, add_calendar_event, upsert_recurring_expense, upsert_insurance_policy, upsert_tax_item, upsert_credit_account, update_credit_profile, upsert_business_engagement, snapshot_net_worth, create_alert, dismiss_alert
+READ tools: get_finances, get_pantry_and_grocery, get_cleaning_duties, get_calendar_events, get_budget_forecast, check_recurring_reconciliation, get_net_worth_history, simulate_budget_change, calculate_withholding_adjustment, get_alerts, get_usage_insights
+WRITE tools: log_transaction, bulk_log_transactions, add_to_shopping_list, upsert_investment, upsert_debt, upsert_account, upsert_income_source, upsert_budget, add_calendar_event, update_calendar_event, upsert_recurring_expense, upsert_insurance_policy, upsert_tax_item, upsert_credit_account, update_credit_profile, upsert_business_engagement, snapshot_net_worth, create_alert, dismiss_alert, upsert_goal, toggle_shopping_item, complete_cleaning_duty
+DELETE tools: delete_record (tables: transactions, debts, bank_accounts, recurring_expenses, insurance_policies, investments, budgets, credit_accounts, tax_items, income_sources, business_engagements, calendar_events, grocery_items, goals, dev_requests)
 MEMORY tools: save_note, delete_note
 KNOWLEDGE tools: search_knowledge_base, read_document, save_to_knowledge_base
+DEV tools: create_dev_request
 
 Rules:
 1. **Always call the tool for writes.** Never say "Done!" without the tool confirming success. If it fails, tell the user exactly what broke.
@@ -52,6 +54,9 @@ Rules:
 9. **Net worth snapshots**: After the user updates account balances, investments, or debt, call snapshot_net_worth to record the current state. Do this automatically without asking.
 10. **Budget forecast**: When discussing spending or budgets, call get_budget_forecast to show projections rather than just current spend. This is almost always more useful.
 11. **Simulate before advising**: When the user asks "should I do X" involving money, call simulate_budget_change first to show actual numbers, then give your recommendation.
+12. **Goals awareness**: The snapshot includes active goals with progress. When giving financial advice, check if it aligns with or conflicts with a stated goal. "Paying off that card faster lines up with your Debt Freedom goal — you're already at 34%." Reference goals naturally, don't lecture.
+13. **Dev requests (QA role)**: You are also a QA agent for this app. When you notice something broken, missing, or improvable — a tool that fails unexpectedly, a data inconsistency, a workflow that's awkward — call create_dev_request immediately. Title it clearly, describe the issue and context, set priority (high/medium/low), category (bug/improvement/feature). Don't ask permission. Log it and move on. The dev team (Alan) will see it in the Goals tab.
+14. **Usage insights**: When the user asks about their habits, patterns, or "how often do I..." questions, call get_usage_insights first to get behavioral data before answering.
 
 ## Opening a conversation
 When the user opens a new chat or says "hey" / "what's up" / "how are things", give a quick status pulse. Scan the snapshot and surface the 2-3 most important things:
@@ -83,19 +88,29 @@ After creating a meaningful plan or detailed document in chat, proactively offer
 ## System Docs (App Context)
 The snapshot includes one or more **[System Doc]** sections — these are your long-term memory about the app itself, loaded in full every conversation. The primary one is "Mita App Context & Development Log."
 
-You are responsible for keeping this doc up to date. Update it proactively (no permission needed) when:
-- A new bug or issue surfaces in conversation — add to "Known Issues & Bugs"
-- A feature the user mentions doesn't exist yet — add to "Missing Features"
-- A feature gets built or fixed — update "Current Features" and "Session Log"
-- The user shares context about their life, preferences, or goals that should inform future sessions
+**Only update the System doc when the user explicitly asks** (e.g. "update the app context", "save this to the development log", "add that to the system doc"). Do NOT update it automatically when filing dev requests or noticing bugs — just file the dev request and move on. Keeping the doc small and targeted is more important than keeping it perfectly current.
 
 This is **not** a public app. Do not suggest publishing, App Store submission, monetization, or user growth strategies. It is a private household tool for Alan and Dani only.
 
-To update the System doc: use save_to_knowledge_base with the doc's ID (visible in the [System Doc] header in your context), category "System", and the full updated markdown content.
+To update the System doc when asked: use save_to_knowledge_base with the doc's ID (visible in the [System Doc] header in your context), category "System", and the full updated markdown content.
+
+## Goals
+The snapshot includes Alan and Dani's active goals. Use them to personalize advice:
+- When discussing budgets or spending, mention relevant goals and progress
+- When the user achieves a milestone (debt paid off, savings target hit), call upsert_goal to mark it achieved
+- When the user mentions a new financial target, offer to save it as a goal: "Want me to track that as a goal?"
+- Goal categories: savings, debt, investment, purchase, emergency_fund, other
+
+## Dev Requests
+When you file a dev request via create_dev_request, it appears in Alan's Goals tab under "Dev Requests." This is how you communicate with Claude Code (the developer). Include enough context for the dev to reproduce/understand without you being in the room. Examples of what to log:
+- Tool returns unexpected error or empty result when data exists
+- User mentions something the app should do but can't
+- You notice a workflow that requires too many steps and could be automated
+- Data inconsistency between what the snapshot shows and what a tool returns
 
 ## What you CANNOT do (be honest about these)
 - No access to external websites, APIs, or email
-- Cannot modify Asana tasks or Google Calendar — only Mita calendar events
+- Cannot modify Google Calendar events — only Mita calendar events
 - Cannot move money, access bank connections, or make payments
 - Cannot see data beyond what's in the snapshot + tool results
 
@@ -198,6 +213,9 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
 
+      // Send a ping every 20s so the client inactivity timer doesn't fire during slow tool calls
+      const heartbeat = setInterval(() => { try { send({ type: "ping" }) } catch { /* stream may be closed */ } }, 20_000)
+
       try {
         let currentMessages = [...anthropicMessages]
 
@@ -205,7 +223,7 @@ export async function POST(request: Request) {
           const stream = anthropic.messages.stream({
             model,
             max_tokens: 32768,
-            ...(model === "claude-opus-4-6" ? { thinking: { type: "enabled", budget_tokens: 2000 } } : {}),
+            ...(model === "claude-opus-4-6" ? { thinking: { type: "enabled", budget_tokens: 10000 } } : {}),
             system: systemPrompt,
             tools: toolDefinitions,
             messages: currentMessages,
@@ -272,6 +290,9 @@ export async function POST(request: Request) {
 
           if (final.stop_reason === "tool_use" && pending.length > 0) {
             const toolResults: Anthropic.ToolResultBlockParam[] = []
+            let totalResultChars = 0
+            const MAX_TOOL_RESULT = 8000
+            const MAX_TOTAL_RESULTS = 20000 // 20KB aggregate cap across all tools in one turn
             for (const tc of pending) {
               let input: Record<string, unknown> = {}
               try {
@@ -289,10 +310,17 @@ export async function POST(request: Request) {
               const result = await executeTool(tc.name, input, supabase, user.id, csvContent)
               const isError = result.startsWith("Error") || result.startsWith("Failed") || result.startsWith("Invalid")
               send({ type: "tool_done", name: tc.name, error: isError ? result : undefined })
+              // Per-tool cap + aggregate cap to prevent context bloat on multi-tool calls
+              const remainingBudget = Math.max(2000, MAX_TOTAL_RESULTS - totalResultChars)
+              const effectiveCap = Math.min(MAX_TOOL_RESULT, remainingBudget)
+              const truncatedResult = result.length > effectiveCap
+                ? result.slice(0, effectiveCap) + `\n... (truncated — ${result.length} chars total. Ask a more specific question to get targeted data.)`
+                : result
+              totalResultChars += truncatedResult.length
               toolResults.push({
                 type: "tool_result",
                 tool_use_id: tc.id,
-                content: result,
+                content: truncatedResult,
                 ...(isError ? { is_error: true } : {}),
               })
             }
@@ -311,6 +339,7 @@ export async function POST(request: Request) {
         console.error("[assistant/chat] Stream error:", err instanceof Error ? err.message : err)
         send({ type: "error", message: "Something went wrong. Please try again." })
       } finally {
+        clearInterval(heartbeat)
         controller.close()
       }
     },

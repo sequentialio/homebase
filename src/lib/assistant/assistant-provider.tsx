@@ -265,6 +265,17 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
     const abortController = new AbortController()
     abortRef.current = abortController
 
+    // Auto-abort if no SSE data received for 45s (hung stream guard)
+    const INACTIVITY_TIMEOUT_MS = 45_000
+    let lastActivityAt = Date.now()
+    const inactivityTimer = setInterval(() => {
+      if (Date.now() - lastActivityAt > INACTIVITY_TIMEOUT_MS) {
+        clearInterval(inactivityTimer)
+        abortController.abort()
+        toast.error("Response timed out — the server stopped responding. Please try again.")
+      }
+    }, 5_000)
+
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
@@ -308,8 +319,10 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
         for (const part of parts) {
           const line = part.replace(/^data: /, "").trim()
           if (!line) continue
+          lastActivityAt = Date.now()
           try {
             const event = JSON.parse(line)
+            if (event.type === "ping") continue  // server heartbeat — just resets inactivity timer
             if (event.type === "thinking_start") {
               setMessages((prev) => {
                 const updated = prev.map((m) =>
@@ -429,6 +442,7 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
         return updated
       })
     } finally {
+      clearInterval(inactivityTimer)
       if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null }
       try { reader?.cancel() } catch { /* ignore */ }
       abortRef.current = null

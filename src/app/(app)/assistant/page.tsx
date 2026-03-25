@@ -7,7 +7,7 @@ export default async function AssistantPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [profileRes, knowledgeRes] = await Promise.all([
+  const [profileRes, knowledgeRes, devRequestsRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("full_name")
@@ -18,6 +18,11 @@ export default async function AssistantPage() {
       .select("*")
       .eq("user_id", user.id)
       .order("title"),
+    (supabase as any)
+      .from("dev_requests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
   ])
 
   const firstName = profileRes.data?.full_name?.trim().split(/\s+/)[0] ?? "there"
@@ -27,6 +32,7 @@ export default async function AssistantPage() {
       userName={firstName}
       userId={user.id}
       initialDocs={knowledgeRes.data ?? []}
+      initialDevRequests={devRequestsRes.data ?? []}
     />
   )
 }
