@@ -285,7 +285,14 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Request failed" }))
+        const rawText = await res.text().catch(() => "")
+        let errMsg = `${res.status} ${res.statusText}`
+        try {
+          const errJson = JSON.parse(rawText)
+          errMsg = errJson.error ?? errMsg
+        } catch {
+          if (rawText.length < 200) errMsg += `: ${rawText}`
+        }
         if (res.status === 401) {
           toast.error("Session expired — please log in again.", {
             action: { label: "Log in", onClick: () => (window.location.href = "/login") },
@@ -302,7 +309,7 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
           try { res.body?.getReader().cancel() } catch { /* ignore */ }
           return
         }
-        throw new Error(err.error ?? "Request failed")
+        throw new Error(errMsg)
       }
 
       reader = res.body!.getReader()
