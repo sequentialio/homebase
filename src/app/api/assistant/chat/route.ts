@@ -163,7 +163,14 @@ export async function POST(request: Request) {
   const model = ALLOWED_MODELS.includes(body.model ?? "") ? body.model! : "claude-sonnet-4-5"
 
   // Build system prompt with fresh context + memory
-  const context = await buildContext(supabase, user.id)
+  let context: string
+  try {
+    context = await buildContext(supabase, user.id)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("[assistant/chat] buildContext failed:", msg)
+    return NextResponse.json({ error: `Context build failed: ${msg}` }, { status: 500 })
+  }
   const systemPrompt = buildSystemPrompt(userName, context, notesText)
 
   // Extract CSV content from the last user message for server-side parsing
