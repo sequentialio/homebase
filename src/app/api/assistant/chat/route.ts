@@ -336,8 +336,12 @@ export async function POST(request: Request) {
 
         send({ type: "done" })
       } catch (err) {
-        console.error("[assistant/chat] Stream error:", err instanceof Error ? err.message : err)
-        send({ type: "error", message: "Something went wrong. Please try again." })
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const errStack = err instanceof Error ? err.stack : undefined
+        console.error("[assistant/chat] Stream error:", errMsg)
+        if (errStack) console.error("[assistant/chat] Stack:", errStack)
+        // Surface the actual error to the client for debugging
+        send({ type: "error", message: errMsg || "Something went wrong. Please try again." })
       } finally {
         clearInterval(heartbeat)
         controller.close()

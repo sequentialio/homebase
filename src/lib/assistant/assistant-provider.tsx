@@ -405,8 +405,9 @@ export function AssistantProvider({ userId, userName, userAvatarUrl, children }:
             } else if (event.type === "error") {
               throw new Error(event.message)
             }
-          } catch {
-            // ignore parse errors
+          } catch (parseErr) {
+            // Re-throw if it's an actual error from the stream (not a JSON parse error)
+            if (parseErr instanceof Error && parseErr.message) throw parseErr
           }
         }
       }
